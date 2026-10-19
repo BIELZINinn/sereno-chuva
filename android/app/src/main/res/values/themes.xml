@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Sereno" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/sereno_bg</item>
+        <item name="android:statusBarColor">@color/sereno_bg</item>
+        <item name="android:navigationBarColor">@color/sereno_bg</item>
+        <item name="android:colorPrimary">@color/sereno_accent</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+    <style name="Theme.Sereno.Splash" parent="Theme.Sereno">
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#070b12" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Sereno — chuva, trovões e noites calmas para pegar no sono." />
+  <meta name="application-name" content="Sereno" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Sereno" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-48.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/icons/icon-512.png" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon-180.png" />
+  <link rel="apple-touch-startup-image" href="assets/splash-1080x1920.png" />
+  <title>Sereno</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="splash">
+    <img src="assets/icons/icon-192.png" alt="Sereno" width="96" height="96" />
+    <h1>Sereno</h1>
+    <p>chuva para dormir</p>
+  </div>
+
+  <canvas id="rain-canvas"></canvas>
+  <div id="lightning"></div>
+  <div id="vignette"></div>
+  <div id="mist"></div>
+
+  <main id="app">
+    <header class="hero">
+      <img class="brand-mark" src="assets/icons/icon-192.png" alt="" width="56" height="56" />
+      <p class="kicker">sons para o sono</p>
+      <h1>Sereno</h1>
+      <p class="tagline">Chuva, trovões e noites calmas. Misture o clima perfeito para pegar no sono.</p>
+    </header>
+
+    <section class="presets" aria-label="Combinações">
+      <div class="section-label">Combinações</div>
+      <div class="preset-row" id="preset-row"></div>
+    </section>
+
+    <section class="mixer" aria-label="Sons">
+      <div class="section-label">Misture os sons</div>
+      <div class="sound-grid" id="sound-grid"></div>
+    </section>
+  </main>
+
+  <footer class="dock">
+    <div class="dock-inner">
+      <button class="play-btn" id="play-btn" aria-label="Reproduzir">
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12 8 5.14z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>
+      </button>
+
+      <div class="dock-meta">
+        <div class="now-playing" id="now-playing">Toque para começar a chuva</div>
+        <div class="master-wrap">
+          <span class="master-label">Geral</span>
+          <input type="range" id="master" min="0" max="100" value="72" />
+        </div>
+      </div>
+
+      <div class="dock-actions">
+        <button class="chip-btn" id="timer-btn" aria-label="Temporizador">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
+          <span id="timer-label">Timer</span>
+        </button>
+        <button class="chip-btn" id="bg-btn" aria-label="Segundo plano">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+          <span id="bg-label">Fundo</span>
+        </button>
+        <button class="chip-btn" id="dim-btn" aria-label="Escurecer tela">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span>Noite</span>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <div class="timer-sheet" id="timer-sheet" hidden>
+    <div class="timer-card">
+      <div class="sheet-handle"></div>
+      <p>Desligar após</p>
+      <div class="timer-grid" id="timer-grid"></div>
+      <div class="until-row">
+        <label for="until-time">Ou até este horário</label>
+        <div class="until-controls">
+          <input type="time" id="until-time" />
+          <button class="timer-opt until-go" id="until-go">Até lá</button>
+        </div>
+      </div>
+      <div class="fade-row">
+        <span>Fade final</span>
+        <div class="fade-opts" id="fade-opts">
+          <button class="mini" data-fade="0">Off</button>
+          <button class="mini active" data-fade="60000">1 min</button>
+          <button class="mini" data-fade="300000">5 min</button>
+          <button class="mini" data-fade="600000">10 min</button>
+        </div>
+      </div>
+      <button class="ghost" id="timer-cancel">Continuar a noite toda</button>
+    </div>
+  </div>
+
+  <button id="install-btn" hidden>Instalar Sereno</button>
+  <audio id="keepalive" loop playsinline></audio>
+
+  <script src="js/audio.js"></script>
+  <script src="js/visual.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

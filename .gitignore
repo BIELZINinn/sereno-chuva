@@ -75,6 +75,7 @@
 # Java
 *.class
 *.jar
+!android/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 **/.gradle/
@@ -155,6 +156,11 @@
 **/web/build/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
+
+# Keep the Sereno Android package
+!apk/
+!apk/**
+!apk/*.apk
 
 # Compressed files
 *.zip
