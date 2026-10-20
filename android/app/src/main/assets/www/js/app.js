@@ -34,6 +34,15 @@ const SOUNDS = [
   { id: "cafe", name: "Café silencioso", desc: "Murmúrio suave", icon: "cup" }
 ];
 
+const GROUPS = [
+  { id: "all", name: "Todos" },
+  { id: "fav", name: "Favoritos" },
+  { id: "rain", name: "Chuva", ids: ["rain", "drizzle", "heavy", "roof", "tent", "window", "gutter", "puddle", "drip", "hail"] },
+  { id: "storm", name: "Trovoada", ids: ["thunder", "closeThunder", "distantThunder", "lightning", "rumble", "wind"] },
+  { id: "nature", name: "Natureza", ids: ["breeze", "leaves", "chime", "river", "waves", "frogs", "crickets", "owl", "forest", "snow"] },
+  { id: "home", name: "Casa", ids: ["fire", "fan", "clock", "train", "purr", "brown", "cafe"] }
+];
+
 const PRESETS = [
   { id: "sleep", name: "Pegar no sono", scene: "window", mix: { rain: 0.7, window: 0.35, brown: 0.25 } },
   { id: "storm", name: "Tempestade", scene: "storm", mix: { heavy: 0.75, thunder: 0.55, closeThunder: 0.4, lightning: 0.35, wind: 0.4 } },
@@ -94,20 +103,26 @@ const ICONS = {
   snow: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v18M5 7l14 10M19 7 5 17"/><circle cx="12" cy="12" r="2"/></svg>'
 };
 
+const STORE = "sereno-state-v3";
 const levels = Object.fromEntries(SOUNDS.map((s) => [s.id, 0]));
 let playing = false;
 let activePreset = null;
+let activeScene = "window";
+let activeGroup = "rain";
 let timerId = null;
 let timerEnds = 0;
 let fadeMs = 60000;
 let waking = false;
 let wakeLock = null;
-let bgKeep = false;
+let bgKeep = true;
+let favorites = [];
+let customPresets = [];
+let idleTimer = null;
 
 const grid = document.getElementById("sound-grid");
 const presetRow = document.getElementById("preset-row");
 const sceneRow = document.getElementById("scene-row");
-let activeScene = "window";
+const groupRow = document.getElementById("group-row");
 const playBtn = document.getElementById("play-btn");
 const nowPlaying = document.getElementById("now-playing");
 const master = document.getElementById("master");
@@ -121,9 +136,69 @@ const bgLabel = document.getElementById("bg-label");
 const untilTime = document.getElementById("until-time");
 const keepalive = document.getElementById("keepalive");
 
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (!s) return;
+    if (s.levels) Object.keys(levels).forEach((id) => { if (typeof s.levels[id] === "number") levels[id] = s.levels[id]; });
+    if (s.activePreset) activePreset = s.activePreset;
+    if (s.activeScene) activeScene = s.activeScene;
+    if (s.activeGroup) activeGroup = s.activeGroup;
+    if (typeof s.master === "number") master.value = String(Math.round(s.master * 100));
+    if (typeof s.fadeMs === "number") fadeMs = s.fadeMs;
+    if (typeof s.bgKeep === "boolean") bgKeep = s.bgKeep;
+    if (Array.isArray(s.favorites)) favorites = s.favorites.filter((id) => levels[id] !== undefined);
+    if (Array.isArray(s.customPresets)) customPresets = s.customPresets;
+    if (s.until) untilTime.value = s.until;
+    if (s.dim) {
+      document.body.classList.add("dim");
+      dimBtn.classList.add("active");
+    }
+  } catch (_) {}
+}
+
+function persist() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify({
+      levels,
+      activePreset,
+      activeScene,
+      activeGroup,
+      master: Number(master.value) / 100,
+      fadeMs,
+      bgKeep,
+      favorites,
+      customPresets,
+      until: untilTime.value,
+      dim: document.body.classList.contains("dim")
+    }));
+  } catch (_) {}
+}
+
+function visibleSounds() {
+  const g = GROUPS.find((x) => x.id === activeGroup) || GROUPS[0];
+  if (g.id === "all") return SOUNDS;
+  if (g.id === "fav") return SOUNDS.filter((s) => favorites.includes(s.id));
+  return SOUNDS.filter((s) => g.ids.includes(s.id));
+}
+
+function renderGroups() {
+  groupRow.innerHTML = GROUPS.map((g) =>
+    `<button class="group-chip${g.id === activeGroup ? " active" : ""}" data-group="${g.id}">${g.name}</button>`
+  ).join("");
+}
+
 function renderSounds() {
-  grid.innerHTML = SOUNDS.map((s) => `
+  const list = visibleSounds();
+  if (!list.length) {
+    grid.innerHTML = `<p class="empty-fav">Toque na estrela de um som para guardá-lo aqui.</p>`;
+    return;
+  }
+  grid.innerHTML = list.map((s) => `
     <article class="sound" data-id="${s.id}">
+      <button class="fav${favorites.includes(s.id) ? " on" : ""}" data-fav="${s.id}" aria-label="Favorito">
+        <svg viewBox="0 0 24 24" fill="${favorites.includes(s.id) ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.6"><path d="M12 4.5 14.4 9l5 .7-3.6 3.5.9 5L12 16.2 7.3 18.2l.9-5L4.6 9.7l5-.7z"/></svg>
+      </button>
       ${ICONS[s.icon]}
       <h3>${s.name}</h3>
       <p>${s.desc}</p>
@@ -132,16 +207,30 @@ function renderSounds() {
   `).join("");
 }
 
+function allPresets() {
+  return customPresets.concat(PRESETS);
+}
+
 function renderPresets() {
-  presetRow.innerHTML = PRESETS.map((p) =>
+  const mine = customPresets.map((p) =>
+    `<button class="preset custom" data-preset="${p.id}" title="Segure para apagar">${p.name}</button>`
+  ).join("");
+  const rest = PRESETS.map((p) =>
     `<button class="preset" data-preset="${p.id}">${p.name}</button>`
   ).join("");
+  presetRow.innerHTML = mine + rest;
 }
 
 function renderScenes() {
   sceneRow.innerHTML = SCENES.map((s) =>
     `<button class="scene-card" data-scene="${s.id}"><i class="mini-scene sc-${s.id}"></i><span>${s.name}</span></button>`
   ).join("");
+}
+
+function nativePlaying(on) {
+  try {
+    if (window.SerenoAndroid && SerenoAndroid.setPlaying) SerenoAndroid.setPlaying(!!on);
+  } catch (_) {}
 }
 
 function updateCards() {
@@ -159,6 +248,9 @@ function updateCards() {
   document.querySelectorAll(".scene-card").forEach((el) => {
     el.classList.toggle("active", el.dataset.scene === activeScene);
   });
+  document.querySelectorAll(".group-chip").forEach((el) => {
+    el.classList.toggle("active", el.dataset.group === activeGroup);
+  });
   const on = SOUNDS.filter((s) => levels[s.id] > 0.01).map((s) => s.name);
   if (!playing) nowPlaying.textContent = "Toque para começar a chuva";
   else if (!on.length) nowPlaying.textContent = "Silêncio — escolha um som";
@@ -169,15 +261,19 @@ function updateCards() {
   SerenoVisual.setIntensity(playing ? 0.2 + rainPower * 0.8 + stormPower * 0.25 : 0.18);
   SerenoVisual.setScene(activeScene);
   updateMediaSession();
+  persist();
 }
 
 async function start() {
   await AudioEngine.resume();
   playing = true;
   playBtn.classList.add("playing");
+  AudioEngine.setMaster(Number(master.value) / 100);
   Object.entries(levels).forEach(([id, v]) => AudioEngine.set(id, v));
   startKeepalive();
   requestWake();
+  nativePlaying(true);
+  bumpIdle();
   updateCards();
 }
 
@@ -187,6 +283,8 @@ function pause() {
   AudioEngine.stopAll();
   stopKeepalive();
   releaseWake();
+  nativePlaying(false);
+  document.body.classList.remove("ambient");
   updateCards();
 }
 
@@ -194,17 +292,41 @@ function applyMix(mix, presetId, sceneId) {
   SOUNDS.forEach((s) => { levels[s.id] = mix[s.id] || 0; });
   activePreset = presetId || null;
   if (sceneId) activeScene = sceneId;
-  if (playing) {
-    SOUNDS.forEach((s) => AudioEngine.set(s.id, levels[s.id]));
-  }
+  if (playing) SOUNDS.forEach((s) => AudioEngine.set(s.id, levels[s.id]));
   updateCards();
 }
 
+function currentMix() {
+  const mix = {};
+  SOUNDS.forEach((s) => { if (levels[s.id] > 0.01) mix[s.id] = +levels[s.id].toFixed(2); });
+  return mix;
+}
+
+function ensurePlaying() {
+  if (playing) return;
+  const any = Object.values(levels).some((v) => v > 0);
+  if (!any) applyMix(PRESETS[0].mix, PRESETS[0].id, PRESETS[0].scene);
+  start();
+}
+
+function bumpIdle() {
+  clearTimeout(idleTimer);
+  if (document.body.classList.contains("ambient")) document.body.classList.remove("ambient");
+  idleTimer = setTimeout(() => {
+    if (playing) document.body.classList.add("ambient");
+  }, 10000);
+}
+
+loadState();
+untilTime.value = untilTime.value || "07:00";
+renderGroups();
 renderSounds();
 renderPresets();
 renderScenes();
+bgBtn.classList.toggle("active", bgKeep);
+bgLabel.textContent = bgKeep ? "Ativo" : "Fundo";
+document.querySelectorAll("#fade-opts .mini").forEach((b) => b.classList.toggle("active", Number(b.dataset.fade) === fadeMs));
 updateCards();
-untilTime.value = "07:00";
 
 window.addEventListener("load", () => {
   const splash = document.getElementById("splash");
@@ -213,7 +335,7 @@ window.addEventListener("load", () => {
 
 const urlPreset = new URLSearchParams(location.search).get("preset");
 if (urlPreset) {
-  const preset = PRESETS.find((p) => p.id === urlPreset);
+  const preset = allPresets().find((p) => p.id === urlPreset);
   if (preset) applyMix(preset.mix, preset.id, preset.scene);
 }
 
@@ -234,6 +356,14 @@ if (installBtn) {
   });
 }
 
+groupRow.addEventListener("click", (e) => {
+  const btn = e.target.closest(".group-chip");
+  if (!btn) return;
+  activeGroup = btn.dataset.group;
+  renderSounds();
+  updateCards();
+});
+
 grid.addEventListener("input", (e) => {
   const id = e.target.dataset.vol;
   if (!id) return;
@@ -245,6 +375,15 @@ grid.addEventListener("input", (e) => {
 });
 
 grid.addEventListener("click", (e) => {
+  const fav = e.target.closest("[data-fav]");
+  if (fav) {
+    const id = fav.dataset.fav;
+    if (favorites.includes(id)) favorites = favorites.filter((x) => x !== id);
+    else favorites.push(id);
+    renderSounds();
+    updateCards();
+    return;
+  }
   const card = e.target.closest(".sound");
   if (!card || e.target.matches("input")) return;
   const id = card.dataset.id;
@@ -258,9 +397,26 @@ grid.addEventListener("click", (e) => {
 presetRow.addEventListener("click", (e) => {
   const btn = e.target.closest(".preset");
   if (!btn) return;
-  const preset = PRESETS.find((p) => p.id === btn.dataset.preset);
+  const preset = allPresets().find((p) => p.id === btn.dataset.preset);
+  if (!preset) return;
   applyMix(preset.mix, preset.id, preset.scene);
   if (!playing) start();
+});
+
+let holdT = null;
+presetRow.addEventListener("pointerdown", (e) => {
+  const btn = e.target.closest(".preset.custom");
+  if (!btn) return;
+  holdT = setTimeout(() => {
+    customPresets = customPresets.filter((p) => p.id !== btn.dataset.preset);
+    if (activePreset === btn.dataset.preset) activePreset = null;
+    renderPresets();
+    updateCards();
+    toast("Mix apagado");
+  }, 650);
+});
+["pointerup", "pointerleave", "pointercancel"].forEach((ev) => {
+  presetRow.addEventListener(ev, () => clearTimeout(holdT));
 });
 
 sceneRow.addEventListener("click", (e) => {
@@ -271,17 +427,29 @@ sceneRow.addEventListener("click", (e) => {
   updateCards();
 });
 
+document.getElementById("save-mix").addEventListener("click", () => {
+  const mix = currentMix();
+  if (!Object.keys(mix).length) {
+    toast("Ligue algum som antes");
+    return;
+  }
+  const n = customPresets.length + 1;
+  const item = { id: "c" + Date.now(), name: "Meu mix " + n, scene: activeScene, mix };
+  customPresets.unshift(item);
+  activePreset = item.id;
+  renderPresets();
+  updateCards();
+  toast("Mix salvo");
+});
+
 playBtn.addEventListener("click", () => {
   if (playing) pause();
-  else {
-    const any = Object.values(levels).some((v) => v > 0);
-    if (!any) applyMix(PRESETS[0].mix, PRESETS[0].id);
-    start();
-  }
+  else ensurePlaying();
 });
 
 master.addEventListener("input", () => {
   AudioEngine.setMaster(Number(master.value) / 100);
+  persist();
 });
 
 const TIMER_OPTS = [
@@ -329,13 +497,6 @@ function clearTimer() {
   waking = false;
   timerLabel.textContent = "Timer";
   timerBtn.classList.remove("active");
-}
-
-function ensurePlaying() {
-  if (playing) return;
-  const any = Object.values(levels).some((v) => v > 0);
-  if (!any) applyMix(PRESETS[0].mix, PRESETS[0].id);
-  start();
 }
 
 function setTimer(ms) {
@@ -404,11 +565,13 @@ document.getElementById("fade-opts").addEventListener("click", (e) => {
   if (!btn) return;
   fadeMs = Number(btn.dataset.fade);
   document.querySelectorAll("#fade-opts .mini").forEach((b) => b.classList.toggle("active", b === btn));
+  persist();
 });
 
 dimBtn.addEventListener("click", () => {
   document.body.classList.toggle("dim");
   dimBtn.classList.toggle("active");
+  persist();
 });
 
 function silentWav() {
@@ -488,19 +651,33 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+["pointerdown", "touchstart", "keydown", "scroll"].forEach((ev) => {
+  document.addEventListener(ev, bumpIdle, { passive: true });
+});
+
+document.getElementById("ambient-hit").addEventListener("click", () => {
+  document.body.classList.remove("ambient");
+  bumpIdle();
+});
+
 bgBtn.addEventListener("click", async () => {
   bgKeep = !bgKeep;
   bgBtn.classList.toggle("active", bgKeep);
   bgLabel.textContent = bgKeep ? "Ativo" : "Fundo";
+  persist();
   if (bgKeep) {
     if (playing) {
       startKeepalive();
       await requestWake();
+      nativePlaying(true);
     }
-    toast("Modo segundo plano ligado. Mantenha o app aberto ou na tela de bloqueio.");
+    toast("Modo segundo plano ligado.");
   } else {
     releaseWake();
-    if (!playing) stopKeepalive();
+    if (!playing) {
+      stopKeepalive();
+      nativePlaying(false);
+    }
     toast("Modo segundo plano desligado");
   }
 });
@@ -508,3 +685,9 @@ bgBtn.addEventListener("click", async () => {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
+
+window.SerenoApp = {
+  play: ensurePlaying,
+  pause,
+  isPlaying() { return playing; }
+};

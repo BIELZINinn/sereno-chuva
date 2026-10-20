@@ -1,4 +1,4 @@
-const CACHE = "sereno-v2";
+const CACHE = "sereno-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,7 +9,12 @@ const ASSETS = [
   "./manifest.json",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
-  "./assets/icons/apple-touch-icon.png"
+  "./assets/icons/apple-touch-icon.png",
+  "./assets/fonts/outfit-300.ttf",
+  "./assets/fonts/outfit-400.ttf",
+  "./assets/fonts/outfit-500.ttf",
+  "./assets/fonts/cormorant-500.ttf",
+  "./assets/fonts/cormorant-italic.ttf"
 ];
 
 self.addEventListener("install", (e) => {

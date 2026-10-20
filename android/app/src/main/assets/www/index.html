@@ -20,9 +20,6 @@
   <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon-180.png" />
   <link rel="apple-touch-startup-image" href="assets/splash-1080x1920.png" />
   <title>Sereno</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -51,12 +48,16 @@
     </section>
 
     <section class="presets" aria-label="Combinações">
-      <div class="section-label">Combinações</div>
+      <div class="section-head">
+        <div class="section-label">Combinações</div>
+        <button class="text-btn" id="save-mix" type="button">Salvar mix</button>
+      </div>
       <div class="preset-row" id="preset-row"></div>
     </section>
 
     <section class="mixer" aria-label="Sons">
       <div class="section-label">Misture os sons</div>
+      <div class="group-row" id="group-row"></div>
       <div class="sound-grid" id="sound-grid"></div>
     </section>
   </main>
@@ -118,6 +119,7 @@
     </div>
   </div>
 
+  <div id="ambient-hit"></div>
   <button id="install-btn" hidden>Instalar Sereno</button>
   <audio id="keepalive" loop playsinline></audio>
 
