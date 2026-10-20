@@ -1,10 +1,38 @@
 const AudioEngine = (() => {
   let ctx = null;
   let master = null;
+  let eqLow = null;
+  let eqHigh = null;
   let started = false;
+  let userMaster = 0.72;
+  let rampMul = 1;
+  let stereoAmt = 0.4;
   const nodes = {};
   const bufs = {};
   const rand = (a, b) => a + Math.random() * (b - a);
+  const PAN = {
+    rain: -0.28, drizzle: -0.18, heavy: 0.08, roof: -0.12, tent: 0.16,
+    window: -0.22, gutter: 0.2, puddle: 0.12, drip: 0.32, hail: 0.22,
+    thunder: 0.38, closeThunder: 0.12, distantThunder: 0.58, lightning: -0.42,
+    rumble: 0.08, wind: -0.3, breeze: -0.22, leaves: 0.26, chime: 0.4,
+    river: -0.16, waves: 0.18, frogs: 0.34, fire: -0.08, crickets: 0.44,
+    owl: -0.36, forest: -0.1, fan: 0, clock: 0.08, train: -0.24, purr: 0.06,
+    snow: 0.04, brown: 0, cafe: 0.14
+  };
+
+  function applyMaster() {
+    if (!master) return;
+    const now = ctx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(Math.max(0.0001, userMaster * rampMul), now);
+  }
+
+  function applyPans() {
+    Object.keys(nodes).forEach((id) => {
+      if (!nodes[id].pan) return;
+      nodes[id].pan.pan.setValueAtTime((PAN[id] || 0) * stereoAmt, ctx.currentTime);
+    });
+  }
 
   function ensure() {
     if (ctx) return;
@@ -12,13 +40,23 @@ const AudioEngine = (() => {
     ctx = new AC({ latencyHint: "playback" });
     master = ctx.createGain();
     master.gain.value = 0.72;
+    eqLow = ctx.createBiquadFilter();
+    eqLow.type = "lowshelf";
+    eqLow.frequency.value = 160;
+    eqLow.gain.value = 0;
+    eqHigh = ctx.createBiquadFilter();
+    eqHigh.type = "highshelf";
+    eqHigh.frequency.value = 3400;
+    eqHigh.gain.value = 0;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -18;
     comp.knee.value = 24;
     comp.ratio.value = 2.2;
     comp.attack.value = 0.012;
     comp.release.value = 0.28;
-    master.connect(comp);
+    master.connect(eqLow);
+    eqLow.connect(eqHigh);
+    eqHigh.connect(comp);
     comp.connect(ctx.destination);
     makeBufs();
   }
@@ -516,7 +554,23 @@ const AudioEngine = (() => {
     isReady() { return started && ctx && ctx.state === "running"; },
     setMaster(v) {
       ensure();
-      master.gain.value = v;
+      userMaster = v;
+      applyMaster();
+    },
+    setRamp(mul) {
+      ensure();
+      rampMul = Math.max(0.2, Math.min(1, mul));
+      applyMaster();
+    },
+    setEq(lowDb, highDb) {
+      ensure();
+      eqLow.gain.value = lowDb;
+      eqHigh.gain.value = highDb;
+    },
+    setStereo(amt) {
+      ensure();
+      stereoAmt = Math.max(0, Math.min(1, amt));
+      applyPans();
     },
     set(id, volume) {
       ensure();
@@ -524,7 +578,11 @@ const AudioEngine = (() => {
       if (!nodes[id]) {
         if (volume <= 0.01) return;
         const created = factories[id]();
-        created.out.connect(master);
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = (PAN[id] || 0) * stereoAmt;
+        created.out.connect(pan);
+        pan.connect(master);
+        created.pan = pan;
         nodes[id] = created;
         if (created.startLoop) created.startLoop();
       }

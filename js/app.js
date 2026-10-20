@@ -103,7 +103,7 @@ const ICONS = {
   snow: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v18M5 7l14 10M19 7 5 17"/><circle cx="12" cy="12" r="2"/></svg>'
 };
 
-const STORE = "sereno-state-v3";
+const STORE = "sereno-state-v4";
 const levels = Object.fromEntries(SOUNDS.map((s) => [s.id, 0]));
 let playing = false;
 let activePreset = null;
@@ -117,7 +117,24 @@ let wakeLock = null;
 let bgKeep = true;
 let favorites = [];
 let customPresets = [];
+let historyMixes = [];
 let idleTimer = null;
+let eqLow = 0;
+let eqHigh = 0;
+let stereo = 0.4;
+let living = false;
+let livingId = null;
+let rampMin = 60;
+let lockAmbient = false;
+let alarmOn = false;
+let alarmTime = "07:00";
+let alarmFade = 60000;
+let alarmId = null;
+let syncCode = "";
+let syncTimer = null;
+let baseMix = null;
+let playStartedAt = 0;
+let dimOn = false;
 
 const grid = document.getElementById("sound-grid");
 const presetRow = document.getElementById("preset-row");
@@ -135,6 +152,8 @@ const bgBtn = document.getElementById("bg-btn");
 const bgLabel = document.getElementById("bg-label");
 const untilTime = document.getElementById("until-time");
 const keepalive = document.getElementById("keepalive");
+const moreBtn = document.getElementById("more-btn");
+const moreSheet = document.getElementById("more-sheet");
 
 function loadState() {
   try {
@@ -151,9 +170,21 @@ function loadState() {
     if (Array.isArray(s.customPresets)) customPresets = s.customPresets;
     if (s.until) untilTime.value = s.until;
     if (s.dim) {
+      dimOn = true;
       document.body.classList.add("dim");
-      dimBtn.classList.add("active");
+      dimBtn.setAttribute("aria-pressed", "true");
     }
+    if (typeof s.eqLow === "number") eqLow = s.eqLow;
+    if (typeof s.eqHigh === "number") eqHigh = s.eqHigh;
+    if (typeof s.stereo === "number") stereo = s.stereo;
+    if (typeof s.living === "boolean") living = s.living;
+    if (typeof s.rampMin === "number") rampMin = s.rampMin;
+    if (typeof s.lockAmbient === "boolean") lockAmbient = s.lockAmbient;
+    if (typeof s.alarmOn === "boolean") alarmOn = s.alarmOn;
+    if (s.alarmTime) alarmTime = s.alarmTime;
+    if (typeof s.alarmFade === "number") alarmFade = s.alarmFade;
+    if (Array.isArray(s.historyMixes)) historyMixes = s.historyMixes.slice(0, 8);
+    if (s.syncCode) syncCode = String(s.syncCode).toUpperCase();
   } catch (_) {}
 }
 
@@ -170,8 +201,15 @@ function persist() {
       favorites,
       customPresets,
       until: untilTime.value,
-      dim: document.body.classList.contains("dim")
+      dim: dimOn,
+      eqLow, eqHigh, stereo, living, rampMin, lockAmbient,
+      alarmOn, alarmTime, alarmFade, historyMixes, syncCode
     }));
+    try {
+      if (window.SerenoAndroid && SerenoAndroid.saveSnapshot) {
+        SerenoAndroid.saveSnapshot(JSON.stringify({ mix: currentMix(), scene: activeScene, preset: activePreset }));
+      }
+    } catch (_) {}
   } catch (_) {}
 }
 
@@ -267,12 +305,17 @@ function updateCards() {
 async function start() {
   await AudioEngine.resume();
   playing = true;
+  playStartedAt = Date.now();
   playBtn.classList.add("playing");
+  applyTone();
   AudioEngine.setMaster(Number(master.value) / 100);
+  AudioEngine.setRamp(1);
   Object.entries(levels).forEach(([id, v]) => AudioEngine.set(id, v));
+  baseMix = currentMix();
   startKeepalive();
   requestWake();
   nativePlaying(true);
+  startLiving();
   bumpIdle();
   updateCards();
 }
@@ -280,11 +323,14 @@ async function start() {
 function pause() {
   playing = false;
   playBtn.classList.remove("playing");
+  stopLiving();
   AudioEngine.stopAll();
+  AudioEngine.setRamp(1);
   stopKeepalive();
   releaseWake();
   nativePlaying(false);
-  document.body.classList.remove("ambient");
+  document.body.classList.remove("ambient", "locked");
+  document.getElementById("wake-banner").hidden = true;
   updateCards();
 }
 
@@ -292,7 +338,10 @@ function applyMix(mix, presetId, sceneId) {
   SOUNDS.forEach((s) => { levels[s.id] = mix[s.id] || 0; });
   activePreset = presetId || null;
   if (sceneId) activeScene = sceneId;
+  baseMix = currentMix();
   if (playing) SOUNDS.forEach((s) => AudioEngine.set(s.id, levels[s.id]));
+  pushHistory();
+  renderHistory();
   updateCards();
 }
 
@@ -300,6 +349,207 @@ function currentMix() {
   const mix = {};
   SOUNDS.forEach((s) => { if (levels[s.id] > 0.01) mix[s.id] = +levels[s.id].toFixed(2); });
   return mix;
+}
+
+function encodeMix(mix, scene) {
+  const ids = SOUNDS.map((s) => s.id);
+  const parts = Object.keys(mix).map((id) => {
+    const i = ids.indexOf(id);
+    if (i < 0) return "";
+    return i.toString(36) + Math.round(mix[id] * 20).toString(36);
+  }).filter(Boolean);
+  return btoa(scene + "|" + parts.join(",")).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+function decodeMix(raw) {
+  try {
+    const pad = raw.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (raw.length % 4)) % 4);
+    const txt = atob(pad);
+    const [scene, rest] = txt.split("|");
+    const ids = SOUNDS.map((s) => s.id);
+    const mix = {};
+    (rest || "").split(",").forEach((p) => {
+      if (!p) return;
+      const i = parseInt(p[0], 36);
+      const v = parseInt(p.slice(1), 36) / 20;
+      if (ids[i]) mix[ids[i]] = Math.min(1, Math.max(0, v));
+    });
+    return { mix, scene: scene || "window" };
+  } catch (_) {
+    return null;
+  }
+}
+
+function pushHistory() {
+  const mix = currentMix();
+  if (!Object.keys(mix).length) return;
+  const key = JSON.stringify(mix);
+  historyMixes = historyMixes.filter((h) => JSON.stringify(h.mix) !== key);
+  historyMixes.unshift({ t: Date.now(), scene: activeScene, mix, name: activePreset ? (allPresets().find((p) => p.id === activePreset) || {}).name || "Mix" : "Mix" });
+  historyMixes = historyMixes.slice(0, 8);
+}
+
+function renderHistory() {
+  const el = document.getElementById("history-list");
+  if (!el) return;
+  if (!historyMixes.length) {
+    el.innerHTML = `<p class="hint">Ainda sem mixes recentes.</p>`;
+    return;
+  }
+  el.innerHTML = historyMixes.map((h, i) => {
+    const n = Object.keys(h.mix).length;
+    const when = new Date(h.t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return `<button class="hist-item" data-h="${i}"><span>${h.name}</span><small>${n} sons · ${when}</small></button>`;
+  }).join("");
+}
+
+function applyTone() {
+  AudioEngine.setEq(eqLow, eqHigh);
+  AudioEngine.setStereo(stereo);
+}
+
+function livingTick() {
+  if (!playing || !living || !baseMix) return;
+  const t = Date.now() / 1000;
+  const wave = 0.78 + Math.sin(t / 38) * 0.18 + Math.sin(t / 17) * 0.08;
+  ["rain", "heavy", "roof", "window", "drizzle", "tent", "wind", "thunder", "closeThunder", "distantThunder", "lightning", "rumble", "hail"].forEach((id) => {
+    if (baseMix[id] == null) return;
+    let v = baseMix[id] * wave;
+    if (id === "lightning" || id === "closeThunder") v *= 0.7 + Math.sin(t / 11) * 0.3;
+    AudioEngine.set(id, Math.max(0, Math.min(1, v)));
+    levels[id] = v;
+  });
+  const rainPower = Math.max(levels.rain || 0, levels.heavy || 0, levels.roof || 0);
+  SerenoVisual.setIntensity(0.2 + rainPower * 0.85);
+}
+
+function startLiving() {
+  stopLiving();
+  if (!living) return;
+  baseMix = currentMix();
+  livingId = setInterval(livingTick, 1200);
+}
+
+function stopLiving() {
+  if (livingId) clearInterval(livingId);
+  livingId = null;
+}
+
+function applyRamp() {
+  if (!playing || !rampMin) {
+    AudioEngine.setRamp(1);
+    return;
+  }
+  const elapsed = Date.now() - playStartedAt;
+  const span = rampMin * 60 * 1000;
+  const mul = elapsed >= span ? 0.4 : 1 - (elapsed / span) * 0.6;
+  AudioEngine.setRamp(mul);
+}
+
+function scheduleAlarm() {
+  if (alarmId) clearTimeout(alarmId);
+  alarmId = null;
+  if (!alarmOn) return;
+  const ms = msUntilClock(alarmTime);
+  alarmId = setTimeout(fireAlarm, ms);
+  try {
+    if (window.SerenoAndroid && SerenoAndroid.setAlarm) SerenoAndroid.setAlarm(alarmTime, true);
+  } catch (_) {}
+}
+
+function cancelAlarmNative() {
+  try {
+    if (window.SerenoAndroid && SerenoAndroid.setAlarm) SerenoAndroid.setAlarm(alarmTime, false);
+  } catch (_) {}
+}
+
+function fireAlarm() {
+  document.body.classList.remove("ambient", "locked");
+  document.getElementById("wake-banner").hidden = false;
+  applyMix({ rain: 0.55, window: 0.35, brown: 0.22, breeze: 0.18 }, null, "window");
+  AudioEngine.setRamp(0.15);
+  ensurePlaying();
+  const steps = 24;
+  let i = 0;
+  const tick = setInterval(() => {
+    i += 1;
+    AudioEngine.setRamp(0.15 + (0.85 * i) / steps);
+    if (i >= steps) clearInterval(tick);
+  }, Math.max(80, alarmFade / steps));
+  toast("Bom dia");
+}
+
+function cloudPack() {
+  return { favorites, customPresets, historyMixes, eqLow, eqHigh, stereo, living, rampMin, lockAmbient, alarmTime, fadeMs };
+}
+
+function applyCloud(data) {
+  if (!data) return;
+  if (Array.isArray(data.favorites)) favorites = data.favorites.filter((id) => levels[id] !== undefined);
+  if (Array.isArray(data.customPresets)) customPresets = data.customPresets;
+  if (Array.isArray(data.historyMixes)) historyMixes = data.historyMixes.slice(0, 8);
+  if (typeof data.eqLow === "number") eqLow = data.eqLow;
+  if (typeof data.eqHigh === "number") eqHigh = data.eqHigh;
+  if (typeof data.stereo === "number") stereo = data.stereo;
+  if (typeof data.living === "boolean") living = data.living;
+  if (typeof data.rampMin === "number") rampMin = data.rampMin;
+  if (typeof data.lockAmbient === "boolean") lockAmbient = data.lockAmbient;
+  if (data.alarmTime) alarmTime = data.alarmTime;
+  renderPresets();
+  renderSounds();
+  renderHistory();
+  fillMore();
+  updateCards();
+}
+
+function packAccount() {
+  try {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(cloudPack())))).replace(/=+$/, "");
+  } catch (_) {
+    return "";
+  }
+}
+
+function unpackAccount(raw) {
+  try {
+    const pad = raw + "=".repeat((4 - (raw.length % 4)) % 4);
+    return JSON.parse(decodeURIComponent(escape(atob(pad))));
+  } catch (_) {
+    return null;
+  }
+}
+
+function accountUrl() {
+  const u = new URL(location.href);
+  u.search = "";
+  u.searchParams.set("acc", packAccount());
+  if (syncCode) u.searchParams.set("code", syncCode);
+  return u.toString();
+}
+
+function newCode() {
+  const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)];
+  return s;
+}
+
+function fillMore() {
+  document.getElementById("eq-low").value = String(eqLow);
+  document.getElementById("eq-high").value = String(eqHigh);
+  document.getElementById("eq-low-val").textContent = (eqLow > 0 ? "+" : "") + eqLow;
+  document.getElementById("eq-high-val").textContent = (eqHigh > 0 ? "+" : "") + eqHigh;
+  document.getElementById("stereo").value = String(Math.round(stereo * 100));
+  document.getElementById("stereo-val").textContent = Math.round(stereo * 100) + "%";
+  document.getElementById("living-btn").setAttribute("aria-pressed", living ? "true" : "false");
+  document.getElementById("lock-btn").setAttribute("aria-pressed", lockAmbient ? "true" : "false");
+  dimBtn.setAttribute("aria-pressed", dimOn ? "true" : "false");
+  document.getElementById("alarm-time").value = alarmTime;
+  document.querySelectorAll("#alarm-fade .mini").forEach((b) => b.classList.toggle("active", Number(b.dataset.af) === alarmFade));
+  document.querySelectorAll("#ramp-opts .mini").forEach((b) => b.classList.toggle("active", Number(b.dataset.ramp) === rampMin));
+  document.getElementById("alarm-hint").textContent = alarmOn ? ("Despertar às " + alarmTime) : "Desliga a noite e acorda com chuva suave.";
+  document.getElementById("sync-code").value = syncCode;
+  document.getElementById("sync-hint").textContent = syncCode ? ("Código: " + syncCode) : "";
 }
 
 function ensurePlaying() {
@@ -311,9 +561,12 @@ function ensurePlaying() {
 
 function bumpIdle() {
   clearTimeout(idleTimer);
-  if (document.body.classList.contains("ambient")) document.body.classList.remove("ambient");
+  if (!lockAmbient) document.body.classList.remove("ambient", "locked");
   idleTimer = setTimeout(() => {
-    if (playing) document.body.classList.add("ambient");
+    if (playing) {
+      document.body.classList.add("ambient");
+      if (lockAmbient) document.body.classList.add("locked");
+    }
   }, 10000);
 }
 
@@ -323,20 +576,45 @@ renderGroups();
 renderSounds();
 renderPresets();
 renderScenes();
+renderHistory();
+fillMore();
 bgBtn.classList.toggle("active", bgKeep);
 bgLabel.textContent = bgKeep ? "Ativo" : "Fundo";
 document.querySelectorAll("#fade-opts .mini").forEach((b) => b.classList.toggle("active", Number(b.dataset.fade) === fadeMs));
 updateCards();
+if (alarmOn) scheduleAlarm();
+setInterval(applyRamp, 15000);
 
 window.addEventListener("load", () => {
   const splash = document.getElementById("splash");
   if (splash) setTimeout(() => splash.classList.add("hide"), 700);
 });
 
-const urlPreset = new URLSearchParams(location.search).get("preset");
+const qs = new URLSearchParams(location.search);
+const urlPreset = qs.get("preset");
 if (urlPreset) {
   const preset = allPresets().find((p) => p.id === urlPreset);
   if (preset) applyMix(preset.mix, preset.id, preset.scene);
+}
+const urlMix = qs.get("mix");
+if (urlMix) {
+  const decoded = decodeMix(urlMix);
+  if (decoded && Object.keys(decoded.mix).length) applyMix(decoded.mix, null, decoded.scene);
+}
+const urlAcc = qs.get("acc");
+if (urlAcc) {
+  const data = unpackAccount(urlAcc);
+  if (data) {
+    applyCloud(data);
+    toast("Conta restaurada neste aparelho");
+  }
+}
+if (qs.get("code")) syncCode = qs.get("code").toUpperCase();
+if (qs.get("play") === "1" || qs.get("wake") === "1") {
+  window.addEventListener("load", () => {
+    if (qs.get("wake") === "1") fireAlarm();
+    else ensurePlaying();
+  }, { once: true });
 }
 
 let deferredPrompt = null;
@@ -427,7 +705,7 @@ sceneRow.addEventListener("click", (e) => {
   updateCards();
 });
 
-document.getElementById("save-mix").addEventListener("click", () => {
+function saveMixNow() {
   const mix = currentMix();
   if (!Object.keys(mix).length) {
     toast("Ligue algum som antes");
@@ -440,7 +718,9 @@ document.getElementById("save-mix").addEventListener("click", () => {
   renderPresets();
   updateCards();
   toast("Mix salvo");
-});
+}
+
+document.getElementById("save-mix").addEventListener("click", saveMixNow);
 
 playBtn.addEventListener("click", () => {
   if (playing) pause();
@@ -568,12 +848,6 @@ document.getElementById("fade-opts").addEventListener("click", (e) => {
   persist();
 });
 
-dimBtn.addEventListener("click", () => {
-  document.body.classList.toggle("dim");
-  dimBtn.classList.toggle("active");
-  persist();
-});
-
 function silentWav() {
   const sampleRate = 8000;
   const seconds = 2;
@@ -655,9 +929,179 @@ document.addEventListener("visibilitychange", () => {
   document.addEventListener(ev, bumpIdle, { passive: true });
 });
 
-document.getElementById("ambient-hit").addEventListener("click", () => {
-  document.body.classList.remove("ambient");
-  bumpIdle();
+let unlockHold = null;
+document.getElementById("ambient-hit").addEventListener("pointerdown", () => {
+  if (!document.body.classList.contains("locked")) {
+    document.body.classList.remove("ambient");
+    bumpIdle();
+    return;
+  }
+  unlockHold = setTimeout(() => {
+    document.body.classList.remove("ambient", "locked");
+    bumpIdle();
+    toast("Tela destrava");
+  }, 2000);
+});
+document.getElementById("ambient-hit").addEventListener("pointerup", () => clearTimeout(unlockHold));
+document.getElementById("ambient-hit").addEventListener("pointerleave", () => clearTimeout(unlockHold));
+
+moreBtn.addEventListener("click", () => {
+  moreSheet.hidden = false;
+  moreBtn.classList.add("active");
+  fillMore();
+  renderHistory();
+});
+moreSheet.addEventListener("click", (e) => {
+  if (e.target === moreSheet) {
+    moreSheet.hidden = true;
+    moreBtn.classList.remove("active");
+  }
+});
+document.getElementById("more-tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".more-tab");
+  if (!tab) return;
+  document.querySelectorAll(".more-tab").forEach((t) => t.classList.toggle("active", t === tab));
+  document.getElementById("tab-night").hidden = tab.dataset.tab !== "night";
+  document.getElementById("tab-tone").hidden = tab.dataset.tab !== "tone";
+  document.getElementById("tab-mix").hidden = tab.dataset.tab !== "mix";
+});
+
+function toggleSwitch(btn, on) {
+  btn.setAttribute("aria-pressed", on ? "true" : "false");
+}
+
+document.getElementById("eq-low").addEventListener("input", (e) => {
+  eqLow = Number(e.target.value);
+  document.getElementById("eq-low-val").textContent = (eqLow > 0 ? "+" : "") + eqLow;
+  applyTone();
+  persist();
+});
+document.getElementById("eq-high").addEventListener("input", (e) => {
+  eqHigh = Number(e.target.value);
+  document.getElementById("eq-high-val").textContent = (eqHigh > 0 ? "+" : "") + eqHigh;
+  applyTone();
+  persist();
+});
+document.getElementById("stereo").addEventListener("input", (e) => {
+  stereo = Number(e.target.value) / 100;
+  document.getElementById("stereo-val").textContent = Math.round(stereo * 100) + "%";
+  applyTone();
+  persist();
+});
+document.getElementById("living-btn").addEventListener("click", () => {
+  living = !living;
+  toggleSwitch(document.getElementById("living-btn"), living);
+  if (living) startLiving();
+  else {
+    stopLiving();
+    if (baseMix && playing) Object.entries(baseMix).forEach(([id, v]) => { levels[id] = v; AudioEngine.set(id, v); });
+  }
+  persist();
+  toast(living ? "Tempestade viva ligada" : "Tempestade viva desligada");
+});
+document.getElementById("lock-btn").addEventListener("click", () => {
+  lockAmbient = !lockAmbient;
+  toggleSwitch(document.getElementById("lock-btn"), lockAmbient);
+  persist();
+  toast(lockAmbient ? "Ambiente travado — segure 2s para sair" : "Trava desligada");
+});
+dimBtn.addEventListener("click", () => {
+  dimOn = !dimOn;
+  document.body.classList.toggle("dim", dimOn);
+  toggleSwitch(dimBtn, dimOn);
+  persist();
+});
+document.getElementById("alarm-on").addEventListener("click", () => {
+  alarmTime = document.getElementById("alarm-time").value || "07:00";
+  alarmOn = true;
+  scheduleAlarm();
+  fillMore();
+  persist();
+  toast("Despertar às " + alarmTime);
+});
+document.getElementById("alarm-off").addEventListener("click", () => {
+  alarmOn = false;
+  if (alarmId) clearTimeout(alarmId);
+  alarmId = null;
+  cancelAlarmNative();
+  fillMore();
+  persist();
+  toast("Despertar desligado");
+});
+document.getElementById("alarm-fade").addEventListener("click", (e) => {
+  const btn = e.target.closest(".mini");
+  if (!btn) return;
+  alarmFade = Number(btn.dataset.af);
+  document.querySelectorAll("#alarm-fade .mini").forEach((b) => b.classList.toggle("active", b === btn));
+  persist();
+});
+document.getElementById("ramp-opts").addEventListener("click", (e) => {
+  const btn = e.target.closest(".mini");
+  if (!btn) return;
+  rampMin = Number(btn.dataset.ramp);
+  document.querySelectorAll("#ramp-opts .mini").forEach((b) => b.classList.toggle("active", b === btn));
+  applyRamp();
+  persist();
+});
+document.getElementById("history-list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".hist-item");
+  if (!btn) return;
+  const h = historyMixes[Number(btn.dataset.h)];
+  if (!h) return;
+  applyMix(h.mix, null, h.scene);
+  moreSheet.hidden = true;
+  moreBtn.classList.remove("active");
+  ensurePlaying();
+});
+document.getElementById("share-mix").addEventListener("click", async () => {
+  const mix = currentMix();
+  if (!Object.keys(mix).length) {
+    toast("Ligue algum som antes");
+    return;
+  }
+  const u = new URL(location.href);
+  u.search = "";
+  u.searchParams.set("mix", encodeMix(mix, activeScene));
+  const link = u.toString();
+  try {
+    if (navigator.share) await navigator.share({ title: "Sereno", text: "Meu mix de chuva", url: link });
+    else {
+      await navigator.clipboard.writeText(link);
+      toast("Link copiado");
+    }
+  } catch (_) {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Link copiado");
+    } catch (__) { toast(link); }
+  }
+});
+document.getElementById("save-mix-sheet").addEventListener("click", saveMixNow);
+document.getElementById("sync-new").addEventListener("click", async () => {
+  syncCode = newCode();
+  fillMore();
+  persist();
+  const link = accountUrl();
+  try {
+    await navigator.clipboard.writeText(link);
+    toast("Código " + syncCode + " · link copiado");
+  } catch (_) {
+    toast("Código " + syncCode);
+  }
+});
+document.getElementById("sync-apply").addEventListener("click", () => {
+  const v = document.getElementById("sync-code").value.trim().toUpperCase();
+  if (v.length < 4) {
+    toast("Cole o código ou abra o link da conta");
+    return;
+  }
+  syncCode = v;
+  persist();
+  toast("Código guardado. Abra o mesmo link neste aparelho.");
+});
+document.getElementById("wake-ok").addEventListener("click", () => {
+  document.getElementById("wake-banner").hidden = true;
+  pause();
 });
 
 bgBtn.addEventListener("click", async () => {
@@ -689,5 +1133,6 @@ if ("serviceWorker" in navigator) {
 window.SerenoApp = {
   play: ensurePlaying,
   pause,
-  isPlaying() { return playing; }
+  isPlaying() { return playing; },
+  wake: fireAlarm
 };

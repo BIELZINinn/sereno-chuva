@@ -86,9 +86,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
           <span id="bg-label">Fundo</span>
         </button>
-        <button class="chip-btn" id="dim-btn" aria-label="Escurecer tela">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          <span>Noite</span>
+        <button class="chip-btn" id="more-btn" aria-label="Mais">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          <span>Mais</span>
         </button>
       </div>
     </div>
@@ -119,7 +119,99 @@
     </div>
   </div>
 
+  <div class="timer-sheet" id="more-sheet" hidden>
+    <div class="timer-card more-card">
+      <div class="sheet-handle"></div>
+      <div class="more-tabs" id="more-tabs">
+        <button class="more-tab active" data-tab="night">Noite</button>
+        <button class="more-tab" data-tab="tone">Tom</button>
+        <button class="more-tab" data-tab="mix">Mix</button>
+      </div>
+
+      <div class="tab-pane" id="tab-night">
+        <p class="pane-title">Despertar</p>
+        <div class="until-controls">
+          <input type="time" id="alarm-time" value="07:00" />
+          <button class="timer-opt" id="alarm-on">Ligar</button>
+        </div>
+        <div class="fade-row">
+          <span>Subir em</span>
+          <div class="fade-opts" id="alarm-fade">
+            <button class="mini" data-af="30000">30s</button>
+            <button class="mini active" data-af="60000">1 min</button>
+            <button class="mini" data-af="180000">3 min</button>
+            <button class="mini" data-af="300000">5 min</button>
+          </div>
+        </div>
+        <p class="hint" id="alarm-hint">Desliga a noite e acorda com chuva suave.</p>
+        <button class="ghost" id="alarm-off">Cancelar despertar</button>
+        <div class="divider"></div>
+        <p class="pane-title">Volume da noite</p>
+        <div class="fade-row">
+          <span>Descer em</span>
+          <div class="fade-opts" id="ramp-opts">
+            <button class="mini" data-ramp="0">Off</button>
+            <button class="mini" data-ramp="30">30 min</button>
+            <button class="mini active" data-ramp="60">1 h</button>
+            <button class="mini" data-ramp="120">2 h</button>
+          </div>
+        </div>
+        <p class="hint">Baixa sozinho até 40% para não acordar no meio da noite.</p>
+        <div class="toggle-row">
+          <span>Travar tela ambiente</span>
+          <button class="switch" id="lock-btn" aria-pressed="false"></button>
+        </div>
+        <p class="hint">No modo ambiente, segure 2s para voltar. Evita toques acidentais.</p>
+        <div class="toggle-row">
+          <span>Modo noite</span>
+          <button class="switch" id="dim-btn" aria-pressed="false"></button>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="tab-tone" hidden>
+        <p class="pane-title">Equalizador</p>
+        <label class="eq-label">Grave <span id="eq-low-val">0</span></label>
+        <input type="range" id="eq-low" min="-8" max="8" value="0" />
+        <label class="eq-label">Agudo <span id="eq-high-val">0</span></label>
+        <input type="range" id="eq-high" min="-8" max="8" value="0" />
+        <div class="divider"></div>
+        <p class="pane-title">Espaço</p>
+        <label class="eq-label">Estéreo <span id="stereo-val">40%</span></label>
+        <input type="range" id="stereo" min="0" max="100" value="40" />
+        <p class="hint">Chuva de um lado, trovão mais longe. Use fones.</p>
+        <div class="toggle-row">
+          <span>Tempestade viva</span>
+          <button class="switch" id="living-btn" aria-pressed="false"></button>
+        </div>
+        <p class="hint">A chuva e os trovões sobem e descem sozinhos.</p>
+      </div>
+
+      <div class="tab-pane" id="tab-mix" hidden>
+        <p class="pane-title">Partilhar</p>
+        <div class="row-btns">
+          <button class="timer-opt" id="share-mix">Copiar link</button>
+          <button class="timer-opt" id="save-mix-sheet">Salvar mix</button>
+        </div>
+        <p class="pane-title">Recentes</p>
+        <div id="history-list" class="history-list"></div>
+        <div class="divider"></div>
+        <p class="pane-title">Conta simples</p>
+        <p class="hint">Gere um link da conta e abra no outro aparelho. Restaura favoritos, mixes e o tom.</p>
+        <div class="until-controls">
+          <input type="text" id="sync-code" maxlength="8" autocapitalize="characters" placeholder="ABC123" />
+          <button class="timer-opt" id="sync-apply">Usar</button>
+        </div>
+        <button class="ghost" id="sync-new">Copiar link da conta</button>
+        <p class="hint" id="sync-hint"></p>
+      </div>
+    </div>
+  </div>
+
   <div id="ambient-hit"></div>
+  <div id="wake-banner" hidden>
+    <p>Hora de acordar</p>
+    <button id="wake-ok">Estou acordado</button>
+  </div>
   <button id="install-btn" hidden>Instalar Sereno</button>
   <audio id="keepalive" loop playsinline></audio>
 
