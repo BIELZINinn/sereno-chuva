@@ -1,9 +1,13 @@
 const SOUNDS = [
   { id: "rain", name: "Chuva suave", desc: "Garoa constante", icon: "cloud" },
+  { id: "drizzle", name: "Garoa fina", desc: "Neblina úmida", icon: "cloud" },
   { id: "heavy", name: "Temporal", desc: "Chuva forte", icon: "storm" },
   { id: "roof", name: "No telhado", desc: "Gotas no zinco", icon: "roof" },
+  { id: "tent", name: "Na barraca", desc: "Lona esticada", icon: "tent" },
   { id: "window", name: "Na janela", desc: "Chuva abafada", icon: "window" },
+  { id: "gutter", name: "Calha", desc: "Água escorrendo", icon: "drop" },
   { id: "puddle", name: "Poças", desc: "Gotas na calçada", icon: "drop" },
+  { id: "drip", name: "Pingos", desc: "Uma a uma", icon: "drop" },
   { id: "hail", name: "Granizo", desc: "Pedras no telhado", icon: "hail" },
   { id: "thunder", name: "Trovões", desc: "Tempestade média", icon: "bolt" },
   { id: "closeThunder", name: "Trovoada perto", desc: "Estalo e estrondo", icon: "bolt2" },
@@ -11,30 +15,53 @@ const SOUNDS = [
   { id: "lightning", name: "Raios", desc: "Clarões secos", icon: "zap" },
   { id: "rumble", name: "Ribombar", desc: "Grave contínuo", icon: "wave2" },
   { id: "wind", name: "Vento", desc: "Brisa noturna", icon: "wind" },
+  { id: "breeze", name: "Brisa suave", desc: "Ar da janela", icon: "wind" },
   { id: "leaves", name: "Folhas", desc: "Vento nas árvores", icon: "leaf" },
+  { id: "chime", name: "Sinos de vento", desc: "Metal ao vento", icon: "chime" },
   { id: "river", name: "Riacho", desc: "Água correndo", icon: "wave" },
   { id: "waves", name: "Ondas", desc: "Mar distante", icon: "wave" },
+  { id: "frogs", name: "Sapos", desc: "Lago à noite", icon: "frog" },
   { id: "fire", name: "Lareira", desc: "Lenha crepitando", icon: "fire" },
   { id: "crickets", name: "Grilos", desc: "Noite no campo", icon: "bug" },
   { id: "owl", name: "Coruja", desc: "Floresta tarde", icon: "owl" },
   { id: "forest", name: "Mata", desc: "Noite úmida", icon: "tree" },
+  { id: "fan", name: "Ventilador", desc: "Zumbido calmo", icon: "fan" },
+  { id: "clock", name: "Relógio", desc: "Tique-taque", icon: "clock" },
+  { id: "train", name: "Trem longe", desc: "Trilhos na chuva", icon: "train" },
+  { id: "purr", name: "Gato", desc: "Ronronar", icon: "cat" },
+  { id: "snow", name: "Neve", desc: "Silêncio branco", icon: "snow" },
   { id: "brown", name: "Ruído marrom", desc: "Fundo profundo", icon: "wave2" },
   { id: "cafe", name: "Café silencioso", desc: "Murmúrio suave", icon: "cup" }
 ];
 
 const PRESETS = [
-  { id: "sleep", name: "Pegar no sono", mix: { rain: 0.7, window: 0.35, brown: 0.25 } },
-  { id: "storm", name: "Tempestade", mix: { heavy: 0.75, thunder: 0.55, closeThunder: 0.4, lightning: 0.35, wind: 0.4 } },
-  { id: "farstorm", name: "Temporal longe", mix: { rain: 0.55, distantThunder: 0.7, rumble: 0.45, window: 0.3 } },
-  { id: "close", name: "Tempestade na janela", mix: { heavy: 0.7, closeThunder: 0.8, lightning: 0.55, hail: 0.25, roof: 0.4 } },
-  { id: "roof", name: "Noite no sótão", mix: { roof: 0.85, thunder: 0.25, wind: 0.2 } },
-  { id: "cabin", name: "Cabana", mix: { rain: 0.45, fire: 0.7, wind: 0.25, window: 0.3 } },
-  { id: "field", name: "Campo", mix: { rain: 0.35, crickets: 0.5, owl: 0.35, wind: 0.2, forest: 0.25 } },
-  { id: "forestn", name: "Floresta", mix: { forest: 0.55, leaves: 0.45, owl: 0.4, rain: 0.3, river: 0.35 } },
-  { id: "coast", name: "Costa", mix: { waves: 0.7, rain: 0.35, wind: 0.45 } },
-  { id: "street", name: "Rua molhada", mix: { heavy: 0.5, puddle: 0.65, distantThunder: 0.3, wind: 0.2 } },
-  { id: "deep", name: "Sono profundo", mix: { brown: 0.7, window: 0.5, rain: 0.25, rumble: 0.15 } },
-  { id: "focus", name: "Ler e dormir", mix: { cafe: 0.35, rain: 0.55, brown: 0.2 } }
+  { id: "sleep", name: "Pegar no sono", scene: "window", mix: { rain: 0.7, window: 0.35, brown: 0.25 } },
+  { id: "storm", name: "Tempestade", scene: "storm", mix: { heavy: 0.75, thunder: 0.55, closeThunder: 0.4, lightning: 0.35, wind: 0.4 } },
+  { id: "farstorm", name: "Temporal longe", scene: "window", mix: { rain: 0.55, distantThunder: 0.7, rumble: 0.45, window: 0.3 } },
+  { id: "close", name: "Tempestade na janela", scene: "storm", mix: { heavy: 0.7, closeThunder: 0.8, lightning: 0.55, hail: 0.25, roof: 0.4 } },
+  { id: "roof", name: "Noite no sótão", scene: "window", mix: { roof: 0.85, thunder: 0.25, wind: 0.2, drip: 0.2 } },
+  { id: "cabin", name: "Cabana", scene: "cabin", mix: { rain: 0.45, fire: 0.7, wind: 0.25, window: 0.3 } },
+  { id: "field", name: "Campo", scene: "forest", mix: { rain: 0.35, crickets: 0.5, owl: 0.35, wind: 0.2, forest: 0.25 } },
+  { id: "forestn", name: "Floresta", scene: "forest", mix: { forest: 0.55, leaves: 0.45, owl: 0.4, rain: 0.3, river: 0.35 } },
+  { id: "swamp", name: "Lago", scene: "forest", mix: { frogs: 0.7, drizzle: 0.4, crickets: 0.35, river: 0.3 } },
+  { id: "coast", name: "Costa", scene: "ocean", mix: { waves: 0.7, rain: 0.35, wind: 0.45 } },
+  { id: "street", name: "Rua molhada", scene: "street", mix: { heavy: 0.5, puddle: 0.65, distantThunder: 0.3, wind: 0.2 } },
+  { id: "camp", name: "Acampamento", scene: "tent", mix: { tent: 0.8, rain: 0.45, fire: 0.4, wind: 0.25 } },
+  { id: "snown", name: "Neve", scene: "snow", mix: { snow: 0.7, breeze: 0.35, fire: 0.4, wind: 0.15 } },
+  { id: "trainn", name: "Viagem", scene: "window", mix: { train: 0.55, rain: 0.4, window: 0.3, brown: 0.2 } },
+  { id: "deep", name: "Sono profundo", scene: "window", mix: { brown: 0.7, window: 0.5, rain: 0.25, rumble: 0.15 } },
+  { id: "focus", name: "Ler e dormir", scene: "cabin", mix: { cafe: 0.35, rain: 0.55, brown: 0.2, clock: 0.15 } }
+];
+
+const SCENES = [
+  { id: "window", name: "Janela" },
+  { id: "storm", name: "Tempestade" },
+  { id: "cabin", name: "Cabana" },
+  { id: "forest", name: "Floresta" },
+  { id: "ocean", name: "Mar" },
+  { id: "street", name: "Cidade" },
+  { id: "tent", name: "Barraca" },
+  { id: "snow", name: "Neve" }
 ];
 
 const ICONS = {
@@ -56,7 +83,15 @@ const ICONS = {
   zap: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2 4 14h7l-1 8 10-14h-8l1-6z"/></svg>',
   leaf: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 19c8-1 13-8 14-15-8 1-14 7-14 15z"/><path d="M5 19c3-5 7-8 12-10"/></svg>',
   owl: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="11" r="2"/><circle cx="15" cy="11" r="2"/><path d="M4 10c1-5 16-5 16 0v6a4 4 0 0 1-8 1 4 4 0 0 1-8-1z"/></svg>',
-  tree: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22v-6"/><path d="M12 16 7 10h10L12 16z"/><path d="M12 11 8 6h8l-4 5z"/></svg>'
+  tree: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22v-6"/><path d="M12 16 7 10h10L12 16z"/><path d="M12 11 8 6h8l-4 5z"/></svg>',
+  tent: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4 3 20h18L12 4z"/><path d="M12 4v16"/></svg>',
+  chime: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v3M8 8v8M12 8v10M16 8v6M6 8h12"/></svg>',
+  frog: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="9" r="2"/><circle cx="16" cy="9" r="2"/><path d="M5 14c2 4 12 4 14 0"/><path d="M8 11c2 2 6 2 8 0"/></svg>',
+  fan: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 9c4-6 9-1 3 3M12 15c-4 6-9 1-3-3M15 12c6 4 1 9-3-3M9 12C3 8 8 3 12 9"/></svg>',
+  clock: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+  train: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="5" width="16" height="10" rx="2"/><path d="M8 19h.01M16 19h.01M4 12h16"/></svg>',
+  cat: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 10 4 5l5 3 3-2 3 2 5-3-2 5"/><ellipse cx="12" cy="14" rx="7" ry="5"/></svg>',
+  snow: '<svg class="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v18M5 7l14 10M19 7 5 17"/><circle cx="12" cy="12" r="2"/></svg>'
 };
 
 const levels = Object.fromEntries(SOUNDS.map((s) => [s.id, 0]));
@@ -71,6 +106,8 @@ let bgKeep = false;
 
 const grid = document.getElementById("sound-grid");
 const presetRow = document.getElementById("preset-row");
+const sceneRow = document.getElementById("scene-row");
+let activeScene = "window";
 const playBtn = document.getElementById("play-btn");
 const nowPlaying = document.getElementById("now-playing");
 const master = document.getElementById("master");
@@ -101,6 +138,12 @@ function renderPresets() {
   ).join("");
 }
 
+function renderScenes() {
+  sceneRow.innerHTML = SCENES.map((s) =>
+    `<button class="scene-card" data-scene="${s.id}"><i class="mini-scene sc-${s.id}"></i><span>${s.name}</span></button>`
+  ).join("");
+}
+
 function updateCards() {
   document.querySelectorAll(".sound").forEach((el) => {
     const id = el.dataset.id;
@@ -113,14 +156,18 @@ function updateCards() {
   document.querySelectorAll(".preset").forEach((el) => {
     el.classList.toggle("active", el.dataset.preset === activePreset);
   });
+  document.querySelectorAll(".scene-card").forEach((el) => {
+    el.classList.toggle("active", el.dataset.scene === activeScene);
+  });
   const on = SOUNDS.filter((s) => levels[s.id] > 0.01).map((s) => s.name);
   if (!playing) nowPlaying.textContent = "Toque para começar a chuva";
   else if (!on.length) nowPlaying.textContent = "Silêncio — escolha um som";
   else nowPlaying.textContent = on.slice(0, 3).join(" · ");
 
-  const rainPower = Math.max(levels.rain || 0, levels.heavy || 0, levels.roof || 0, levels.window || 0, levels.hail || 0, levels.puddle || 0);
+  const rainPower = Math.max(levels.rain || 0, levels.heavy || 0, levels.roof || 0, levels.window || 0, levels.hail || 0, levels.puddle || 0, levels.drizzle || 0, levels.tent || 0);
   const stormPower = Math.max(levels.thunder || 0, levels.closeThunder || 0, levels.lightning || 0, levels.distantThunder || 0);
   SerenoVisual.setIntensity(playing ? 0.2 + rainPower * 0.8 + stormPower * 0.25 : 0.18);
+  SerenoVisual.setScene(activeScene);
   updateMediaSession();
 }
 
@@ -143,9 +190,10 @@ function pause() {
   updateCards();
 }
 
-function applyMix(mix, presetId) {
+function applyMix(mix, presetId, sceneId) {
   SOUNDS.forEach((s) => { levels[s.id] = mix[s.id] || 0; });
   activePreset = presetId || null;
+  if (sceneId) activeScene = sceneId;
   if (playing) {
     SOUNDS.forEach((s) => AudioEngine.set(s.id, levels[s.id]));
   }
@@ -154,6 +202,7 @@ function applyMix(mix, presetId) {
 
 renderSounds();
 renderPresets();
+renderScenes();
 updateCards();
 untilTime.value = "07:00";
 
@@ -165,7 +214,7 @@ window.addEventListener("load", () => {
 const urlPreset = new URLSearchParams(location.search).get("preset");
 if (urlPreset) {
   const preset = PRESETS.find((p) => p.id === urlPreset);
-  if (preset) applyMix(preset.mix, preset.id);
+  if (preset) applyMix(preset.mix, preset.id, preset.scene);
 }
 
 let deferredPrompt = null;
@@ -210,8 +259,16 @@ presetRow.addEventListener("click", (e) => {
   const btn = e.target.closest(".preset");
   if (!btn) return;
   const preset = PRESETS.find((p) => p.id === btn.dataset.preset);
-  applyMix(preset.mix, preset.id);
+  applyMix(preset.mix, preset.id, preset.scene);
   if (!playing) start();
+});
+
+sceneRow.addEventListener("click", (e) => {
+  const btn = e.target.closest(".scene-card");
+  if (!btn) return;
+  activeScene = btn.dataset.scene;
+  SerenoVisual.setScene(activeScene);
+  updateCards();
 });
 
 playBtn.addEventListener("click", () => {
