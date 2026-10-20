@@ -12,7 +12,7 @@ Baixe e instale:
 
 - Nome do app: **Sereno**
 - Pacote: `app.sereno.chuva`
-- Versão: 1.0.0
+- Versão: 1.0.4
 - Android 7+ (API 24)
 
 No celular, permita instalar de fontes desconhecidas e abra o arquivo.

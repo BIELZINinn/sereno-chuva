@@ -1,4 +1,4 @@
-const CACHE = "sereno-v4";
+const CACHE = "sereno-v6";
 const ASSETS = [
   "./",
   "./index.html",

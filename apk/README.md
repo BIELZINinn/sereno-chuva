@@ -3,7 +3,7 @@
 **Sereno** — chuva para dormir.
 
 - Pacote: `app.sereno.chuva`
-- Versao: 1.0.3
+- Versao: 1.0.4
 - Min SDK: 24 (Android 7)
 - Arquivo: `Sereno.apk`
 

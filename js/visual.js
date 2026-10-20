@@ -1,8 +1,14 @@
 const SerenoVisual = (() => {
   const canvas = document.getElementById("rain-canvas");
   const lightning = document.getElementById("lightning");
-  const ctx = canvas.getContext("2d", { alpha: true });
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
   let w = 0, h = 0, dpr = 1, t = 0;
+  let live = false;
+  let hidden = false;
+  let raf = 0;
+  let lastDraw = 0;
+  let bgGrad = null;
+  let bgKey = "";
   let intensity = 0.35;
   let scene = "window";
   let drops = [];
@@ -25,7 +31,8 @@ const SerenoVisual = (() => {
   };
 
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    const mobile = Math.min(window.innerWidth, window.innerHeight) < 820;
+    dpr = mobile ? 1 : Math.min(window.devicePixelRatio || 1, 1.15);
     w = window.innerWidth;
     h = window.innerHeight;
     canvas.width = Math.floor(w * dpr);
@@ -33,11 +40,12 @@ const SerenoVisual = (() => {
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bgKey = "";
     spawnStars();
   }
 
   function spawnStars() {
-    stars = Array.from({ length: 28 }, () => ({
+    stars = Array.from({ length: 14 }, () => ({
       x: Math.random() * w,
       y: Math.random() * h * 0.55,
       r: Math.random() * 1.4 + 0.3,
@@ -57,11 +65,15 @@ const SerenoVisual = (() => {
   }
 
   function bg(cols) {
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, cols[0]);
-    g.addColorStop(0.45, cols[1]);
-    g.addColorStop(1, cols[2]);
-    ctx.fillStyle = g;
+    const key = scene + w + "x" + h;
+    if (bgKey !== key) {
+      bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+      bgGrad.addColorStop(0, cols[0]);
+      bgGrad.addColorStop(0.45, cols[1]);
+      bgGrad.addColorStop(1, cols[2]);
+      bgKey = key;
+    }
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
   }
 
@@ -97,24 +109,27 @@ const SerenoVisual = (() => {
   }
 
   function drawRain() {
-    const target = Math.floor(18 + intensity * 90);
+    const target = Math.floor(8 + intensity * 36);
     while (drops.length < target) drops.push(spawnDrop());
-    if (drops.length > target + 30) drops.length = target;
+    if (drops.length > target) drops.length = target;
+    const drift = scene === "storm" ? 1.2 : 0.35;
+    const tilt = scene === "storm" ? 4 : 1.2;
+    const mul = 0.65 + intensity;
     ctx.lineCap = "round";
+    ctx.strokeStyle = `rgba(190,214,235,${0.18 + intensity * 0.28})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
     for (const d of drops) {
-      d.y += d.speed * (0.65 + intensity);
-      d.x += scene === "storm" ? 1.2 : 0.35;
-      ctx.strokeStyle = `rgba(190,214,235,${d.alpha * (0.4 + intensity * 0.75)})`;
-      ctx.lineWidth = d.thick;
-      ctx.beginPath();
+      d.y += d.speed * mul;
+      d.x += drift;
       ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - (scene === "storm" ? 4 : 1.2), d.y + d.len);
-      ctx.stroke();
+      ctx.lineTo(d.x - tilt, d.y + d.len);
       if (d.y > h + 20) {
         d.y = -20;
         d.x = Math.random() * w;
       }
     }
+    ctx.stroke();
   }
 
   function drawWindow() {
@@ -156,7 +171,7 @@ const SerenoVisual = (() => {
     ctx.moveTo(fx + fw * 0.2, fy + 40);
     ctx.quadraticCurveTo(fx + fw * 0.5, fy - 30 - Math.sin(t * 0.03) * 10, fx + fw * 0.8, fy + 40);
     ctx.fill();
-    while (embers.length < 8) {
+    while (embers.length < 4) {
       embers.push({ x: fx + fw * 0.5, y: fy, vx: (Math.random() - 0.5) * 0.6, vy: -1 - Math.random(), a: 1 });
     }
     for (let i = embers.length - 1; i >= 0; i--) {
@@ -176,14 +191,14 @@ const SerenoVisual = (() => {
     ctx.fillStyle = "#08160f";
     ctx.beginPath();
     ctx.moveTo(0, h);
-    for (let x = 0; x <= w; x += 18) {
+    for (let x = 0; x <= w; x += 28) {
       const y = h * 0.62 + Math.sin(x * 0.02 + t * 0.001) * 10;
       ctx.lineTo(x, y);
     }
     ctx.lineTo(w, h);
     ctx.fill();
-    for (let i = 0; i < 9; i++) {
-      const x = (i + 0.3) * (w / 9);
+    for (let i = 0; i < 6; i++) {
+      const x = (i + 0.3) * (w / 6);
       const th = 80 + (i % 3) * 40;
       ctx.fillStyle = "rgba(6,18,12,.85)";
       ctx.beginPath();
@@ -216,7 +231,7 @@ const SerenoVisual = (() => {
       ctx.moveTo(0, h);
       const amp = 10 + layer * 8;
       const speed = 0.0014 + layer * 0.0006;
-      for (let x = 0; x <= w; x += 16) {
+      for (let x = 0; x <= w; x += 24) {
         const y = base + layer * 22 + Math.sin(x * 0.018 + t * speed) * amp;
         ctx.lineTo(x, y);
       }
@@ -282,7 +297,7 @@ const SerenoVisual = (() => {
   }
 
   function drawSnow() {
-    while (flakes.length < 36) {
+    while (flakes.length < 18) {
       flakes.push({
         x: Math.random() * w,
         y: Math.random() * h,
@@ -327,14 +342,8 @@ const SerenoVisual = (() => {
     bolts.push({ pts, life: 1 });
   }
 
-  let frame = 0;
-  function tick() {
-    t += 16;
-    frame++;
-    if (frame % 2 === 1) {
-      requestAnimationFrame(tick);
-      return;
-    }
+  function drawFrame(now) {
+    t = now;
     const cols = palettes[scene] || palettes.window;
     bg(cols);
     if (scene === "snow" || scene === "forest" || scene === "ocean") drawStars(0.55);
@@ -352,21 +361,60 @@ const SerenoVisual = (() => {
     if (scene !== "snow") drawRain();
     drawBolts();
     if (scene === "window") drawWindow();
-    requestAnimationFrame(tick);
   }
 
-  window.addEventListener("resize", resize);
+  function tick(now) {
+    raf = 0;
+    if (!live || hidden) return;
+    const gap = live && document.body.classList.contains("ambient") ? 90 : 55;
+    if (now - lastDraw >= gap) {
+      lastDraw = now;
+      drawFrame(now);
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function startLoop() {
+    if (hidden) return;
+    live = true;
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
+  function stopLoop() {
+    live = false;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  window.addEventListener("resize", () => {
+    resize();
+    if (!hidden) drawFrame(performance.now());
+  });
+  document.addEventListener("visibilitychange", () => {
+    hidden = document.hidden;
+    if (hidden) {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    } else if (live) {
+      startLoop();
+    }
+  });
   resize();
-  tick();
+  drawFrame(0);
 
   return {
     setIntensity(v) { intensity = Math.max(0.08, Math.min(1, v)); },
     setScene(id) {
       scene = id || "window";
       document.body.dataset.scene = scene;
+      bgKey = "";
+      if (!hidden) drawFrame(performance.now());
     },
     scene() { return scene; },
+    start() { startLoop(); },
+    stop() { stopLoop(); },
     flash(power = 0.4) {
+      if (hidden) return;
       lightning.style.transition = "opacity 40ms linear";
       lightning.style.opacity = String(power);
       if (power > 0.45) makeBolt();

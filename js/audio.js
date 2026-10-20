@@ -9,6 +9,7 @@ const AudioEngine = (() => {
   let stereoAmt = 0.4;
   const nodes = {};
   const bufs = {};
+  let bag = null;
   const rand = (a, b) => a + Math.random() * (b - a);
   const PAN = {
     rain: -0.28, drizzle: -0.18, heavy: 0.08, roof: -0.12, tent: 0.16,
@@ -97,13 +98,18 @@ const AudioEngine = (() => {
     return f;
   }
 
+  function keep(node) {
+    if (bag) bag.push(node);
+    return node;
+  }
+
   function loop(buf, rate) {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.loop = true;
     src.playbackRate.value = rate || 1;
     src.start();
-    return src;
+    return keep(src);
   }
 
   function lfo(hz, amt, dest) {
@@ -114,7 +120,26 @@ const AudioEngine = (() => {
     o.connect(g);
     g.connect(dest);
     o.start();
-    return o;
+    return keep(o);
+  }
+
+  function killVoice(n) {
+    if (!n) return;
+    try { if (n.stop) n.stop(); } catch (_) {}
+    if (n._kill) clearTimeout(n._kill);
+    (n._bag || []).forEach((s) => {
+      try { s.stop(); } catch (_) {}
+      try { s.disconnect(); } catch (_) {}
+    });
+    try { n.out.disconnect(); } catch (_) {}
+    try { if (n.pan) n.pan.disconnect(); } catch (_) {}
+  }
+
+  function releaseIfSilent(id) {
+    const n = nodes[id];
+    if (!n || n.out.gain.value > 0.002) return;
+    killVoice(n);
+    delete nodes[id];
   }
 
   function chain(buf, opt) {
@@ -195,6 +220,7 @@ const AudioEngine = (() => {
     subEnv.gain.value = 0.0001;
     sub.connect(subEnv).connect(out);
     sub.start();
+    keep(sub);
 
     const crackSrc = loop(bufs.white, 1.05);
     const crackHp = filter("highpass", kind === "zap" ? 1800 : 900, 0.8);
@@ -289,8 +315,13 @@ const AudioEngine = (() => {
       : kind === "zap" ? [7000, 20000]
       : kind === "close" ? [8000, 20000]
       : [7000, 18000];
-    const stop = pulse(out, boom, wait[0], wait[1]);
-    return { out, startLoop() { setTimeout(boom, rand(900, 2800)); }, stop };
+    const stopPulse = pulse(out, boom, wait[0], wait[1]);
+    let firstBoom;
+    return {
+      out,
+      startLoop() { firstBoom = setTimeout(boom, rand(900, 2800)); },
+      stop() { stopPulse(); clearTimeout(firstBoom); }
+    };
   }
 
   function noiseHit({ hp, bp, q, peak, att, dur, min, max, rate }) {
@@ -337,6 +368,7 @@ const AudioEngine = (() => {
     env.gain.value = 0.0001;
     osc.connect(bp).connect(env).connect(out);
     osc.start();
+    keep(osc);
     const chirp = () => {
       const t = ctx.currentTime;
       const f = rand(4300, 5400);
@@ -364,6 +396,7 @@ const AudioEngine = (() => {
     env.gain.value = 0.0001;
     osc.connect(lp).connect(env).connect(out);
     osc.start();
+    keep(osc);
     const hoot = () => {
       const t = ctx.currentTime;
       [0, 0.55].forEach((off, i) => {
@@ -391,6 +424,7 @@ const AudioEngine = (() => {
     env.gain.value = 0.0001;
     osc.connect(bp).connect(env).connect(out);
     osc.start();
+    keep(osc);
     const ribbit = () => {
       const t = ctx.currentTime;
       const n = 2 + Math.floor(rand(0, 3));
@@ -418,6 +452,7 @@ const AudioEngine = (() => {
       g.gain.value = 0.0001;
       o.connect(g).connect(out);
       o.start();
+      keep(o);
       return { o, g, f };
     });
     const stop = pulse(out, () => {
@@ -542,7 +577,6 @@ const AudioEngine = (() => {
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), now);
     gain.gain.linearRampToValueAtTime(value <= 0 ? 0.0001 : v, now + ms / 1000);
-    if (value <= 0) setTimeout(() => { if (gain.gain.value < 0.001) gain.gain.value = 0; }, ms + 40);
   }
 
   return {
@@ -577,7 +611,10 @@ const AudioEngine = (() => {
       if (!factories[id]) return;
       if (!nodes[id]) {
         if (volume <= 0.01) return;
+        bag = [];
         const created = factories[id]();
+        created._bag = bag;
+        bag = null;
         const pan = ctx.createStereoPanner();
         pan.pan.value = (PAN[id] || 0) * stereoAmt;
         created.out.connect(pan);
@@ -586,13 +623,26 @@ const AudioEngine = (() => {
         nodes[id] = created;
         if (created.startLoop) created.startLoop();
       }
-      fade(nodes[id].out, volume);
+      const n = nodes[id];
+      if (n._kill) { clearTimeout(n._kill); n._kill = 0; }
+      fade(n.out, volume);
+      if (volume <= 0.01) {
+        n._kill = setTimeout(() => releaseIfSilent(id), 620);
+      }
     },
     stopAll() {
-      Object.keys(nodes).forEach((id) => fade(nodes[id].out, 0, 700));
+      Object.keys(nodes).forEach((id) => {
+        fade(nodes[id].out, 0, 700);
+        if (nodes[id]._kill) clearTimeout(nodes[id]._kill);
+        nodes[id]._kill = setTimeout(() => releaseIfSilent(id), 780);
+      });
     },
     fadeOutAll(ms = 20000) {
-      Object.keys(nodes).forEach((id) => fade(nodes[id].out, 0, ms));
+      Object.keys(nodes).forEach((id) => {
+        fade(nodes[id].out, 0, ms);
+        if (nodes[id]._kill) clearTimeout(nodes[id]._kill);
+        nodes[id]._kill = setTimeout(() => releaseIfSilent(id), ms + 80);
+      });
     },
     getContext() { ensure(); return ctx; }
   };

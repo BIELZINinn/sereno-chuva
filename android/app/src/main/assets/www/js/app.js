@@ -188,7 +188,12 @@ function loadState() {
   } catch (_) {}
 }
 
+let persistT = 0;
 function persist() {
+  clearTimeout(persistT);
+  persistT = setTimeout(persistNow, 400);
+}
+function persistNow() {
   try {
     localStorage.setItem(STORE, JSON.stringify({
       levels,
@@ -316,6 +321,7 @@ async function start() {
   requestWake();
   nativePlaying(true);
   startLiving();
+  if (window.SerenoVisual && SerenoVisual.start) SerenoVisual.start();
   bumpIdle();
   updateCards();
 }
@@ -329,6 +335,7 @@ function pause() {
   stopKeepalive();
   releaseWake();
   nativePlaying(false);
+  if (window.SerenoVisual && SerenoVisual.stop) SerenoVisual.stop();
   document.body.classList.remove("ambient", "locked");
   document.getElementById("wake-banner").hidden = true;
   updateCards();
@@ -427,7 +434,7 @@ function startLiving() {
   stopLiving();
   if (!living) return;
   baseMix = currentMix();
-  livingId = setInterval(livingTick, 1200);
+  livingId = setInterval(livingTick, 2800);
 }
 
 function stopLiving() {
@@ -562,10 +569,13 @@ function ensurePlaying() {
 function bumpIdle() {
   clearTimeout(idleTimer);
   if (!lockAmbient) document.body.classList.remove("ambient", "locked");
+  const ambient = document.body.classList.contains("ambient");
+  if (playing && !ambient && window.SerenoVisual && SerenoVisual.start) SerenoVisual.start();
   idleTimer = setTimeout(() => {
     if (playing) {
       document.body.classList.add("ambient");
       if (lockAmbient) document.body.classList.add("locked");
+      if (window.SerenoVisual && SerenoVisual.stop) SerenoVisual.stop();
     }
   }, 10000);
 }
@@ -587,7 +597,11 @@ setInterval(applyRamp, 15000);
 
 window.addEventListener("load", () => {
   const splash = document.getElementById("splash");
-  if (splash) setTimeout(() => splash.classList.add("hide"), 700);
+  if (!splash) return;
+  setTimeout(() => {
+    splash.classList.add("hide");
+    setTimeout(() => splash.remove(), 800);
+  }, 1100);
 });
 
 const qs = new URLSearchParams(location.search);
@@ -811,22 +825,36 @@ function msUntilClock(hhmm) {
   return target.getTime() - now.getTime();
 }
 
+function openSheet(sheet) {
+  sheet.hidden = false;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => sheet.classList.add("open"));
+  });
+}
+function closeSheet(sheet, after) {
+  sheet.classList.remove("open");
+  setTimeout(() => {
+    sheet.hidden = true;
+    if (after) after();
+  }, 280);
+}
+
 timerBtn.addEventListener("click", () => {
-  timerSheet.hidden = false;
+  openSheet(timerSheet);
 });
 timerSheet.addEventListener("click", (e) => {
-  if (e.target === timerSheet) timerSheet.hidden = true;
+  if (e.target === timerSheet) closeSheet(timerSheet);
 });
 document.getElementById("timer-cancel").addEventListener("click", () => {
   clearTimer();
-  timerSheet.hidden = true;
+  closeSheet(timerSheet);
   toast("Timer desligado — a noite toda");
 });
 timerGrid.addEventListener("click", (e) => {
   const btn = e.target.closest(".timer-opt");
   if (!btn) return;
   setTimer(TIMER_OPTS[Number(btn.dataset.i)].ms);
-  timerSheet.hidden = true;
+  closeSheet(timerSheet);
   ensurePlaying();
 });
 document.getElementById("until-go").addEventListener("click", () => {
@@ -836,7 +864,7 @@ document.getElementById("until-go").addEventListener("click", () => {
   }
   const ms = msUntilClock(untilTime.value);
   setTimer(ms);
-  timerSheet.hidden = true;
+  closeSheet(timerSheet);
   ensurePlaying();
   toast("Desliga às " + untilTime.value);
 });
@@ -933,11 +961,13 @@ let unlockHold = null;
 document.getElementById("ambient-hit").addEventListener("pointerdown", () => {
   if (!document.body.classList.contains("locked")) {
     document.body.classList.remove("ambient");
+    if (playing && window.SerenoVisual && SerenoVisual.start) SerenoVisual.start();
     bumpIdle();
     return;
   }
   unlockHold = setTimeout(() => {
     document.body.classList.remove("ambient", "locked");
+    if (playing && window.SerenoVisual && SerenoVisual.start) SerenoVisual.start();
     bumpIdle();
     toast("Tela destrava");
   }, 2000);
@@ -946,15 +976,14 @@ document.getElementById("ambient-hit").addEventListener("pointerup", () => clear
 document.getElementById("ambient-hit").addEventListener("pointerleave", () => clearTimeout(unlockHold));
 
 moreBtn.addEventListener("click", () => {
-  moreSheet.hidden = false;
+  openSheet(moreSheet);
   moreBtn.classList.add("active");
   fillMore();
   renderHistory();
 });
 moreSheet.addEventListener("click", (e) => {
   if (e.target === moreSheet) {
-    moreSheet.hidden = true;
-    moreBtn.classList.remove("active");
+    closeSheet(moreSheet, () => moreBtn.classList.remove("active"));
   }
 });
 document.getElementById("more-tabs").addEventListener("click", (e) => {
@@ -1049,8 +1078,7 @@ document.getElementById("history-list").addEventListener("click", (e) => {
   const h = historyMixes[Number(btn.dataset.h)];
   if (!h) return;
   applyMix(h.mix, null, h.scene);
-  moreSheet.hidden = true;
-  moreBtn.classList.remove("active");
+  closeSheet(moreSheet, () => moreBtn.classList.remove("active"));
   ensurePlaying();
 });
 document.getElementById("share-mix").addEventListener("click", async () => {
