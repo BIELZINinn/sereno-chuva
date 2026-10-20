@@ -7,6 +7,9 @@ const AudioEngine = (() => {
   let userMaster = 0.72;
   let rampMul = 1;
   let stereoAmt = 0.4;
+  let nineD = false;
+  let orbitId = 0;
+  let orbitT = 0;
   const nodes = {};
   const bufs = {};
   let bag = null;
@@ -20,6 +23,41 @@ const AudioEngine = (() => {
     owl: -0.36, forest: -0.1, fan: 0, clock: 0.08, train: -0.24, purr: 0.06,
     snow: 0.04, brown: 0, cafe: 0.14
   };
+  const POS = {
+    rain: { x: -0.55, y: 0.45, z: -1.1, s: 0.11 },
+    drizzle: { x: -0.25, y: 0.55, z: -1.4, s: 0.07 },
+    heavy: { x: 0.15, y: 0.35, z: -0.7, s: 0.14 },
+    roof: { x: -0.2, y: 0.7, z: -0.9, s: 0.09 },
+    tent: { x: 0.25, y: 0.55, z: -0.85, s: 0.1 },
+    window: { x: -0.4, y: 0.15, z: -1.2, s: 0.06 },
+    gutter: { x: 0.55, y: -0.1, z: -0.9, s: 0.08 },
+    puddle: { x: 0.2, y: -0.45, z: -0.7, s: 0.12 },
+    drip: { x: 0.5, y: 0.2, z: -0.8, s: 0.16 },
+    hail: { x: 0.35, y: 0.6, z: -0.75, s: 0.18 },
+    thunder: { x: 0.7, y: 0.2, z: -1.6, s: 0.05 },
+    closeThunder: { x: 0.15, y: 0.1, z: -0.55, s: 0.08 },
+    distantThunder: { x: 1.1, y: 0.25, z: -2.4, s: 0.03 },
+    lightning: { x: -0.9, y: 0.7, z: -1.3, s: 0.2 },
+    rumble: { x: 0.1, y: -0.2, z: -1.8, s: 0.04 },
+    wind: { x: -0.8, y: 0.2, z: -1.0, s: 0.13 },
+    breeze: { x: -0.45, y: 0.15, z: -1.3, s: 0.09 },
+    leaves: { x: 0.65, y: 0.35, z: -1.1, s: 0.12 },
+    chime: { x: 0.85, y: 0.5, z: -0.9, s: 0.15 },
+    river: { x: -0.35, y: -0.3, z: -1.2, s: 0.07 },
+    waves: { x: 0.4, y: -0.15, z: -1.7, s: 0.06 },
+    frogs: { x: 0.7, y: -0.25, z: -1.4, s: 0.1 },
+    fire: { x: -0.15, y: -0.2, z: -0.7, s: 0.05 },
+    crickets: { x: 0.9, y: -0.1, z: -1.5, s: 0.11 },
+    owl: { x: -0.85, y: 0.4, z: -1.8, s: 0.04 },
+    forest: { x: -0.2, y: 0.1, z: -1.6, s: 0.05 },
+    fan: { x: 0, y: 0.1, z: -0.6, s: 0.02 },
+    clock: { x: 0.25, y: 0, z: -0.8, s: 0.03 },
+    train: { x: -0.7, y: -0.1, z: -2.0, s: 0.08 },
+    purr: { x: 0.1, y: -0.15, z: -0.5, s: 0.04 },
+    snow: { x: 0.05, y: 0.4, z: -1.5, s: 0.06 },
+    brown: { x: 0, y: 0, z: -0.9, s: 0.02 },
+    cafe: { x: 0.3, y: 0.05, z: -1.2, s: 0.07 }
+  };
 
   function applyMaster() {
     if (!master) return;
@@ -28,11 +66,83 @@ const AudioEngine = (() => {
     master.gain.setValueAtTime(Math.max(0.0001, userMaster * rampMul), now);
   }
 
+  function setPos(panner, x, y, z) {
+    if (!panner) return;
+    if (panner.positionX) {
+      panner.positionX.setTargetAtTime(x, ctx.currentTime, 0.12);
+      panner.positionY.setTargetAtTime(y, ctx.currentTime, 0.12);
+      panner.positionZ.setTargetAtTime(z, ctx.currentTime, 0.12);
+    } else if (panner.setPosition) {
+      panner.setPosition(x, y, z);
+    }
+  }
+
+  function placeNode(id, n) {
+    if (!n || !n.pan) return;
+    if (n.spatial) {
+      const p = POS[id] || { x: 0, y: 0, z: -1, s: 0.08 };
+      const w = 0.45 + stereoAmt * 1.15;
+      const a = orbitT * p.s;
+      setPos(n.pan, (p.x + Math.sin(a) * 0.55) * w, p.y, p.z + Math.cos(a) * 0.35);
+    } else if (n.pan.pan) {
+      n.pan.pan.setTargetAtTime((PAN[id] || 0) * stereoAmt, ctx.currentTime, 0.05);
+    }
+  }
+
+  function place(id) {
+    placeNode(id, nodes[id]);
+  }
+
   function applyPans() {
-    Object.keys(nodes).forEach((id) => {
-      if (!nodes[id].pan) return;
-      nodes[id].pan.pan.setValueAtTime((PAN[id] || 0) * stereoAmt, ctx.currentTime);
-    });
+    Object.keys(nodes).forEach(place);
+  }
+
+  function startOrbit() {
+    if (orbitId) return;
+    orbitId = setInterval(() => {
+      if (!nineD) return;
+      orbitT += 0.22;
+      applyPans();
+    }, 180);
+  }
+
+  function stopOrbit() {
+    if (orbitId) clearInterval(orbitId);
+    orbitId = 0;
+  }
+
+  function makePanner(id) {
+    if (nineD && ctx.createPanner) {
+      const p = ctx.createPanner();
+      p.panningModel = "HRTF";
+      p.distanceModel = "inverse";
+      p.refDistance = 1;
+      p.maxDistance = 12;
+      p.rolloffFactor = 0.45;
+      p.coneInnerAngle = 360;
+      p.coneOuterAngle = 360;
+      return { pan: p, spatial: true };
+    }
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = (PAN[id] || 0) * stereoAmt;
+    return { pan, spatial: false };
+  }
+
+  function hookPan(id, created) {
+    const made = makePanner(id);
+    created.pan = made.pan;
+    created.spatial = made.spatial;
+    created.out.connect(created.pan);
+    created.pan.connect(master);
+    placeNode(id, created);
+  }
+
+  function reconnectPan(id) {
+    const n = nodes[id];
+    if (!n) return;
+    try { n.out.disconnect(); } catch (_) {}
+    try { if (n.pan) n.pan.disconnect(); } catch (_) {}
+    hookPan(id, n);
   }
 
   function ensure() {
@@ -62,32 +172,42 @@ const AudioEngine = (() => {
     makeBufs();
   }
 
-  function makeBufs() {
-    const n = Math.floor(ctx.sampleRate * 2);
-    const brown = ctx.createBuffer(1, n, ctx.sampleRate);
-    const white = ctx.createBuffer(1, n, ctx.sampleRate);
-    const pink = ctx.createBuffer(1, n, ctx.sampleRate);
-    const b = brown.getChannelData(0);
-    const w = white.getChannelData(0);
-    const p = pink.getChannelData(0);
+  function fillNoise(ch, kind) {
     let last = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < ch.length; i++) {
       const x = Math.random() * 2 - 1;
-      w[i] = x;
-      last = (last + 0.02 * x) / 1.02;
-      b[i] = last * 3.5;
-      b0 = 0.99886 * b0 + x * 0.0555179;
-      b1 = 0.99332 * b1 + x * 0.0750759;
-      b2 = 0.96900 * b2 + x * 0.1538520;
-      b3 = 0.86650 * b3 + x * 0.3104856;
-      b4 = 0.55000 * b4 + x * 0.5329522;
-      b5 = -0.7616 * b5 - x * 0.0168980;
-      p[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + x * 0.5362) * 0.11;
-      b6 = x * 0.115926;
+      if (kind === "white") {
+        ch[i] = x;
+      } else if (kind === "brown") {
+        last = (last + 0.02 * x) / 1.02;
+        ch[i] = last * 3.5;
+      } else {
+        b0 = 0.99886 * b0 + x * 0.0555179;
+        b1 = 0.99332 * b1 + x * 0.0750759;
+        b2 = 0.96900 * b2 + x * 0.1538520;
+        b3 = 0.86650 * b3 + x * 0.3104856;
+        b4 = 0.55000 * b4 + x * 0.5329522;
+        b5 = -0.7616 * b5 - x * 0.0168980;
+        ch[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + x * 0.5362) * 0.11;
+        b6 = x * 0.115926;
+      }
     }
-    bufs.brown = brown;
-    bufs.white = white;
-    bufs.pink = pink;
+  }
+
+  function stereoNoise(kind, secs) {
+    const n = Math.floor(ctx.sampleRate * secs);
+    const buf = ctx.createBuffer(2, n, ctx.sampleRate);
+    fillNoise(buf.getChannelData(0), kind);
+    fillNoise(buf.getChannelData(1), kind);
+    return buf;
+  }
+
+  function makeBufs() {
+    bufs.brown = stereoNoise("brown", 2.4);
+    bufs.white = stereoNoise("white", 2.4);
+    bufs.pink = stereoNoise("pink", 2.4);
+    bufs.rainL = stereoNoise("white", 3.2);
+    bufs.rainB = stereoNoise("brown", 3.2);
   }
 
   function filter(type, freq, q = 0.8) {
@@ -211,7 +331,13 @@ const AudioEngine = (() => {
     const bodyHp = filter("highpass", kind === "far" ? 28 : 40, 0.6);
     const bodyEnv = ctx.createGain();
     bodyEnv.gain.value = 0.0001;
-    bodySrc.connect(bodyHp).connect(bodyLp).connect(bodyEnv).connect(out);
+    const echo = ctx.createDelay();
+    echo.delayTime.value = kind === "far" ? 0.22 : kind === "close" ? 0.045 : 0.09;
+    const echoG = ctx.createGain();
+    echoG.gain.value = kind === "far" ? 0.45 : kind === "close" ? 0.18 : 0.28;
+    bodySrc.connect(bodyHp).connect(bodyLp).connect(bodyEnv);
+    bodyEnv.connect(out);
+    bodyEnv.connect(echo).connect(echoG).connect(out);
 
     const sub = ctx.createOscillator();
     sub.type = "sine";
@@ -506,17 +632,20 @@ const AudioEngine = (() => {
 
   const factories = {
     rain: () => mix([
-      { buf: bufs.brown, hp: 180, lp: 2200, rate: 0.72, gain: 0.5 },
-      { buf: bufs.white, hp: 1200, lp: 6500, rate: 0.95, gain: 0.16, lfoHz: 0.11, lfoAmt: 0.05 }
+      { buf: bufs.rainB, hp: 140, lp: 1800, rate: 0.68, gain: 0.52 },
+      { buf: bufs.rainL, hp: 900, lp: 5200, rate: 0.92, gain: 0.18, lfoHz: 0.09, lfoAmt: 0.04 },
+      { buf: bufs.white, hp: 2800, lp: 7800, rate: 1.08, gain: 0.07 }
     ]),
     drizzle: () => mix([
-      { buf: bufs.white, hp: 2400, lp: 7800, rate: 0.8, gain: 0.14 },
-      { buf: bufs.pink, hp: 900, lp: 2800, rate: 0.55, gain: 0.08 }
+      { buf: bufs.white, hp: 2200, lp: 7600, rate: 0.78, gain: 0.13 },
+      { buf: bufs.pink, hp: 700, lp: 2600, rate: 0.52, gain: 0.09 },
+      { buf: bufs.white, hp: 4200, lp: 9000, rate: 1.15, gain: 0.04 }
     ]),
     heavy: () => mix([
-      { buf: bufs.white, hp: 120, lp: 3800, rate: 0.88, gain: 0.55 },
-      { buf: bufs.brown, lp: 280, rate: 0.5, gain: 0.35 },
-      { buf: bufs.white, hp: 2800, lp: 8000, rate: 1.05, gain: 0.12 }
+      { buf: bufs.white, hp: 90, lp: 3400, rate: 0.86, gain: 0.52 },
+      { buf: bufs.brown, lp: 240, rate: 0.48, gain: 0.38 },
+      { buf: bufs.white, hp: 2400, lp: 8200, rate: 1.08, gain: 0.14 },
+      { buf: bufs.pink, hp: 400, lp: 1400, rate: 0.7, gain: 0.12 }
     ]),
     roof: () => mix([
       { buf: bufs.white, hp: 700, bp: 2100, q: 1.4, rate: 1.02, gain: 0.32, lfoHz: 7, lfoAmt: 0.1 },
@@ -606,6 +735,21 @@ const AudioEngine = (() => {
       stereoAmt = Math.max(0, Math.min(1, amt));
       applyPans();
     },
+    setNineD(on) {
+      ensure();
+      const next = !!on;
+      if (next === nineD) {
+        if (nineD) startOrbit();
+        return;
+      }
+      nineD = next;
+      Object.keys(nodes).forEach(reconnectPan);
+      if (nineD) startOrbit();
+      else {
+        stopOrbit();
+        applyPans();
+      }
+    },
     set(id, volume) {
       ensure();
       if (!factories[id]) return;
@@ -615,11 +759,7 @@ const AudioEngine = (() => {
         const created = factories[id]();
         created._bag = bag;
         bag = null;
-        const pan = ctx.createStereoPanner();
-        pan.pan.value = (PAN[id] || 0) * stereoAmt;
-        created.out.connect(pan);
-        pan.connect(master);
-        created.pan = pan;
+        hookPan(id, created);
         nodes[id] = created;
         if (created.startLoop) created.startLoop();
       }

@@ -122,6 +122,7 @@ let idleTimer = null;
 let eqLow = 0;
 let eqHigh = 0;
 let stereo = 0.4;
+let nineD = false;
 let living = false;
 let livingId = null;
 let rampMin = 60;
@@ -177,6 +178,7 @@ function loadState() {
     if (typeof s.eqLow === "number") eqLow = s.eqLow;
     if (typeof s.eqHigh === "number") eqHigh = s.eqHigh;
     if (typeof s.stereo === "number") stereo = s.stereo;
+    if (typeof s.nineD === "boolean") nineD = s.nineD;
     if (typeof s.living === "boolean") living = s.living;
     if (typeof s.rampMin === "number") rampMin = s.rampMin;
     if (typeof s.lockAmbient === "boolean") lockAmbient = s.lockAmbient;
@@ -207,7 +209,7 @@ function persistNow() {
       customPresets,
       until: untilTime.value,
       dim: dimOn,
-      eqLow, eqHigh, stereo, living, rampMin, lockAmbient,
+      eqLow, eqHigh, stereo, nineD, living, rampMin, lockAmbient,
       alarmOn, alarmTime, alarmFade, historyMixes, syncCode
     }));
     try {
@@ -413,6 +415,7 @@ function renderHistory() {
 function applyTone() {
   AudioEngine.setEq(eqLow, eqHigh);
   AudioEngine.setStereo(stereo);
+  AudioEngine.setNineD(nineD);
 }
 
 function livingTick() {
@@ -487,7 +490,7 @@ function fireAlarm() {
 }
 
 function cloudPack() {
-  return { favorites, customPresets, historyMixes, eqLow, eqHigh, stereo, living, rampMin, lockAmbient, alarmTime, fadeMs };
+  return { favorites, customPresets, historyMixes, eqLow, eqHigh, stereo, nineD, living, rampMin, lockAmbient, alarmTime, fadeMs };
 }
 
 function applyCloud(data) {
@@ -498,6 +501,7 @@ function applyCloud(data) {
   if (typeof data.eqLow === "number") eqLow = data.eqLow;
   if (typeof data.eqHigh === "number") eqHigh = data.eqHigh;
   if (typeof data.stereo === "number") stereo = data.stereo;
+  if (typeof data.nineD === "boolean") nineD = data.nineD;
   if (typeof data.living === "boolean") living = data.living;
   if (typeof data.rampMin === "number") rampMin = data.rampMin;
   if (typeof data.lockAmbient === "boolean") lockAmbient = data.lockAmbient;
@@ -548,6 +552,7 @@ function fillMore() {
   document.getElementById("eq-high-val").textContent = (eqHigh > 0 ? "+" : "") + eqHigh;
   document.getElementById("stereo").value = String(Math.round(stereo * 100));
   document.getElementById("stereo-val").textContent = Math.round(stereo * 100) + "%";
+  document.getElementById("nined-btn").setAttribute("aria-pressed", nineD ? "true" : "false");
   document.getElementById("living-btn").setAttribute("aria-pressed", living ? "true" : "false");
   document.getElementById("lock-btn").setAttribute("aria-pressed", lockAmbient ? "true" : "false");
   dimBtn.setAttribute("aria-pressed", dimOn ? "true" : "false");
@@ -1016,6 +1021,13 @@ document.getElementById("stereo").addEventListener("input", (e) => {
   document.getElementById("stereo-val").textContent = Math.round(stereo * 100) + "%";
   applyTone();
   persist();
+});
+document.getElementById("nined-btn").addEventListener("click", () => {
+  nineD = !nineD;
+  toggleSwitch(document.getElementById("nined-btn"), nineD);
+  applyTone();
+  persist();
+  toast(nineD ? "Áudio 9D — use fones" : "Áudio 9D desligado");
 });
 document.getElementById("living-btn").addEventListener("click", () => {
   living = !living;
